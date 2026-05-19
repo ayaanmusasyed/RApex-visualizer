@@ -1,6 +1,6 @@
 #include <memory>
 #include <vector>
-
+#include <algorithm>
 #include <iostream>
 
 #include "RApexSearch.h"
@@ -53,6 +53,35 @@ bool RApexSearch::is_dominated(RealizationPairPtr ap, bool transferFlag = false)
     return solution_dom_checker->is_dominated(ap, transferFlag);
 }
 
+// helper function to reconstruct path in visualizer from node ids
+static void trace_path_from_node(std::ofstream &out, NodePtr node) {
+    std::vector<size_t> path;
+
+    while (node != nullptr) {
+        path.push_back(node->id);
+        node = node->parent;
+    }
+
+    std::reverse(path.begin(), path.end());
+
+    out << "[";
+    for (size_t i = 0; i < path.size(); ++i) {
+        if (i > 0) out << ",";
+        out << path[i];
+    }
+    out << "]";
+}
+
+// heper func to print vector 
+static void trace_vec(std::ofstream &out, const std::vector<size_t> &v) {
+    out << "[";
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) out << ",";
+        out << v[i];
+    }
+    out << "]";
+}
+
 void RApexSearch::operator()(size_t source, size_t target, Heuristic &heuristic, SolutionSet &solutions, unsigned int time_limit) {
 
     init_search();
@@ -103,17 +132,33 @@ void RApexSearch::operator()(size_t source, size_t target, Heuristic &heuristic,
             }
 
             // Visualizer: emit final accepted solution set
-            if (trace_.is_open()) {
-                trace_ << "{\"type\":\"final_solutions\",\"step\":" << trace_step_++
-                    << ",\"solutions\":[";
-                bool first = true;
-                for (auto solution = rp_solutions.begin(); solution != rp_solutions.end(); ++solution) {
-                    if (!first) trace_ << ",";
-                    trace_ << *(*solution);
-                    first = false;
-                }
-                trace_ << "]}\n";
+            trace_ << "{\"type\":\"final_solutions\",\"step\":" << trace_step_++
+                << ",\"solutions\":[";
+
+            bool first = true;
+
+            for (auto solution = rp_solutions.begin(); solution != rp_solutions.end(); ++solution) {
+                if (!first) trace_ << ",";
+
+                auto rp_sol = *solution;
+
+                trace_ << "{";
+
+                trace_ << "\"apex\":";
+                trace_vec(trace_, rp_sol->rule_apex->f);
+
+                trace_ << ",\"realization\":";
+                trace_vec(trace_, rp_sol->realization->f);
+
+                trace_ << ",\"path\":";
+                trace_path_from_node(trace_, rp_sol->realization);
+
+                trace_ << "}";
+
+                first = false;
             }
+
+            trace_ << "]}\n";
 
             this->end_logging(solutions, false);
             if (trace_.is_open()) trace_.close();

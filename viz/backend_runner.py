@@ -11,6 +11,7 @@ from solution_utils import (
     compute_solution_paths,
     compute_candidate_paths,
     paths_to_edges,
+    collect_final_solution_paths_from_trace,
 )
 
 # Helper function to verify file paths and binary
@@ -125,15 +126,27 @@ def run_algorithm(
             trace = parse_trace_lines(raw_lines)
             trace_stepper = init_from_trace(trace)
 
-            solution_edges = compute_solution_edges(
-                trace, edges_df, name_to_id, start_label, goal_label, k
-            )
-            solution_paths = compute_solution_paths(
-                trace, edges_df, name_to_id, start_label, goal_label, k
-            )
-            candidate_paths = compute_candidate_paths(
-                trace, edges_df, name_to_id, start_label, goal_label, k, eps
-            )
+            id_to_name = {v: k for k, v in name_to_id.items()}
+
+            solution_paths = collect_final_solution_paths_from_trace(fixed, id_to_name)
+
+            if solution_paths:
+                solution_edges = paths_to_edges(solution_paths)
+            else:
+                solution_edges = compute_solution_edges(
+                    trace, edges_df, name_to_id, start_label, goal_label, k
+                )
+                solution_paths = compute_solution_paths(
+                    trace, edges_df, name_to_id, start_label, goal_label, k
+                )
+
+            if len(edges_df) <= 20:
+                candidate_paths = compute_candidate_paths(
+                    trace, edges_df, name_to_id, start_label, goal_label, k, eps
+                )
+            else:
+                candidate_paths = []
+
             candidate_edges = paths_to_edges(candidate_paths)
 
         return {

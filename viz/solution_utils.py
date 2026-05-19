@@ -196,6 +196,24 @@ def collect_final_solution_pairs(trace):
 
     return []
 
+def collect_final_solution_paths_from_trace(trace, id_to_name):
+    paths = []
+
+    for evt in trace:
+        if evt.get("type") != "final_solutions":
+            continue
+
+        for sol in evt.get("solutions", []):
+            if isinstance(sol, dict) and "path" in sol:
+                path = [
+                    id_to_name.get(int(node_id), str(node_id))
+                    for node_id in sol["path"]
+                ]
+                paths.append(path)
+
+        return paths
+
+    return []
 
 def rulebook_leq(x, y, rule_names, prec_df, eps):
     """
