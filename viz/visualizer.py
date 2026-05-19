@@ -205,7 +205,7 @@ with st.sidebar:
 
 
 st.header("Rule precedence graph")
-st.caption("Only explicit edges define priority. Rules with no edges remain incomparable.")
+st.caption("State rule graph edges to explicitly define rule priority. Rules with no edges remain incomparable.")
 if "prec_df" not in st.session_state:
     st.session_state.prec_df = pd.DataFrame(columns=["Higher Priority", "Lower Priority"])
 
@@ -217,7 +217,7 @@ prec_df = st.data_editor(
 )
 st.session_state.prec_df = prec_df
 st.subheader("Rule graph preview")
-st.caption("Only drawn arrows define priority. Rules with no arrows are incomparable.")
+st.caption("Direct edges define priority. Rules with no arrows are incomparable.")
 st.graphviz_chart(dot_for_rule_graph(rule_names, prec_df))
 
 st.header("Problem graph edges")
