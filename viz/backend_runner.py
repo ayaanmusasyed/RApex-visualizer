@@ -13,6 +13,46 @@ from solution_utils import (
     paths_to_edges,
 )
 
+# Helper function to verify file paths and binary
+def ensure_binary(repo_root: Path):
+    bin_path = repo_root / "build" / "multiobj"
+    build_dir = repo_root / "build"
+
+    if bin_path.exists():
+        return bin_path
+
+    build_dir.mkdir(exist_ok=True)
+
+    configure = subprocess.run(
+        ["cmake", "-S", str(repo_root), "-B", str(build_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    if configure.returncode != 0:
+        raise RuntimeError(
+            "CMake configure failed.\n\n"
+            f"STDOUT:\n{configure.stdout}\n\n"
+            f"STDERR:\n{configure.stderr}"
+        )
+
+    build = subprocess.run(
+        ["cmake", "--build", str(build_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    if build.returncode != 0:
+        raise RuntimeError(
+            "CMake build failed.\n\n"
+            f"STDOUT:\n{build.stdout}\n\n"
+            f"STDERR:\n{build.stderr}"
+        )
+
+    if not bin_path.exists():
+        raise FileNotFoundError("Build finished but build/multiobj was not created.")
+
+    return bin_path
 
 def run_algorithm(
     algorithm_name,
@@ -36,14 +76,7 @@ def run_algorithm(
 
 
     repo_root = Path(__file__).resolve().parents[1]
-    bin_path = repo_root / "build" / "multiobj"
-
-    if not bin_path.exists():
-        subprocess.run(["cmake", "-S", str(repo_root), "-B", str(repo_root / "build")], check=True)
-        subprocess.run(["cmake", "--build", str(repo_root / "build")], check=True)
-        
-    if not bin_path.exists():
-        raise FileNotFoundError("Could not find build/multiobj. Build the C++ project first.")
+    bin_path = ensure_binary(repo_root)
 
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
