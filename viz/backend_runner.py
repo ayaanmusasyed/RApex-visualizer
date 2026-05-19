@@ -38,11 +38,9 @@ def run_algorithm(
     repo_root = Path(__file__).resolve().parents[1]
     bin_path = repo_root / "build" / "multiobj"
 
-    bin_path = repo_root / "build" / "multiobj"
-
     if not bin_path.exists():
-        subprocess.run(["cmake", "-S", ".", "-B", "build"], check=True)
-        subprocess.run(["cmake", "--build", "build"], check=True)
+        subprocess.run(["cmake", "-S", str(repo_root), "-B", str(repo_root / "build")], check=True)
+        subprocess.run(["cmake", "--build", str(repo_root / "build")], check=True)
         
     if not bin_path.exists():
         raise FileNotFoundError("Could not find build/multiobj. Build the C++ project first.")
