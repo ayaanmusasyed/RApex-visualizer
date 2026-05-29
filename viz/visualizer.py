@@ -16,6 +16,8 @@ from backend_runner import run_algorithm
 
 from algorithm_config import ALGORITHMS
 
+from examples import EXAMPLES 
+
 def allowed_algorithms(k):
     out = []
     for name, cfg in ALGORITHMS.items():
@@ -42,8 +44,17 @@ mode = st.radio("Mode", ["Single Run", "Compare Algorithms"], horizontal=True)
 st.header("Import / Export JSON")
 
 with st.expander("Upload or paste JSON problem"):
-    uploaded_json = st.file_uploader("Upload JSON", type=["json"], key="problem_json")
-    pasted_json = st.text_area("Or paste JSON here", height=220)
+
+    uploaded_json = st.file_uploader("Upload JSON", type=["json"],key="problem_json")
+
+    example_name = st.selectbox("Use example", [""] + list(EXAMPLES.keys()))
+
+    if st.button("Load selected example"):
+        if example_name:
+            st.session_state.sample_json_text = EXAMPLES[example_name]
+            st.rerun()
+
+    pasted_json = st.text_area("Or paste JSON here", value=st.session_state.get("sample_json_text", ""),height=220)
 
     def _rulebook_layers_to_edges(layers):
         edges = []
