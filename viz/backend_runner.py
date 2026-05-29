@@ -120,11 +120,12 @@ def run_algorithm(
         candidate_edges = set()
         candidate_paths = []
 
-        # Only parse trace if the algorithm actually produced one
         if trace_path.exists():
             raw_lines = trace_path.read_text(encoding="utf-8").splitlines()
-            trace = parse_trace_lines(raw_lines)
-            trace_stepper = init_from_trace(trace)
+            fixed = parse_trace_lines(raw_lines)
+
+            trace = fixed
+            trace_stepper = init_from_trace(fixed)
 
             id_to_name = {v: k for k, v in name_to_id.items()}
 
@@ -134,15 +135,15 @@ def run_algorithm(
                 solution_edges = paths_to_edges(solution_paths)
             else:
                 solution_edges = compute_solution_edges(
-                    trace, edges_df, name_to_id, start_label, goal_label, k
+                    fixed, edges_df, name_to_id, start_label, goal_label, k
                 )
                 solution_paths = compute_solution_paths(
-                    trace, edges_df, name_to_id, start_label, goal_label, k
+                    fixed, edges_df, name_to_id, start_label, goal_label, k
                 )
 
             if len(edges_df) <= 20:
                 candidate_paths = compute_candidate_paths(
-                    trace, edges_df, name_to_id, start_label, goal_label, k, eps
+                    fixed, edges_df, name_to_id, start_label, goal_label, k, eps
                 )
             else:
                 candidate_paths = []
