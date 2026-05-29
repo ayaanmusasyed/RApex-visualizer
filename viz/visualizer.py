@@ -4,7 +4,7 @@ import json
 import streamlit as st
 import pandas as pd
 
-from trace_utils import apply_trace_step, init_from_trace
+from trace_utils import apply_trace_step, init_from_trace, extract_realization
 from render_utils import unscale_vec, pretty_vec, dot_for_graph, dot_for_rule_graph
 from solution_utils import (
     collect_goal_vectors,
@@ -533,14 +533,40 @@ st.subheader("Event log")
 def pretty_event(e):
     if e["kind"] == "meta":
         return f"Using solver **{e['solver']}**."
+
     if e["kind"] == "pop":
         return f"Popped **{id_to_label(e['state'])}** with cost {pretty_vec(e['f'])}."
+
     if e["kind"] == "enqueue":
         frm = id_to_label(e["from"]) if e.get("from") is not None else "?"
         to = id_to_label(e["to"]) if e.get("to") is not None else "?"
         return f"From **{frm}**, added **{to}** to OPEN with cost {pretty_vec(e['f'])}."
+
     if e["kind"] == "prune":
         return f"Pruned **{id_to_label(e['state'])}**."
+
+    if e["kind"] == "other":
+        raw = e.get("raw", {})
+        t = raw.get("type", "unknown")
+
+        if t == "goal":
+            item = extract_realization(raw)
+            return f"Reached goal **{id_to_label(item['state'])}** with cost {pretty_vec(item['f'])}."
+
+        if t == "solution":
+            item = extract_realization(raw)
+            return f"Accepted representative realization at **{id_to_label(item['state'])}** with cost {pretty_vec(item['f'])}."
+
+        if t == "prune":
+            item = extract_realization(raw)
+            where = raw.get("where", "search")
+            return f"Pruned **{id_to_label(item['state'])}** during **{where}** with cost {pretty_vec(item['f'])}."
+
+        if t == "final_solutions":
+            return "Computed final RApex solution pair(s)."
+
+        return f"Trace event: **{t}**."
+
     return str(e)
 
 for e in stp.events[-50:]:
