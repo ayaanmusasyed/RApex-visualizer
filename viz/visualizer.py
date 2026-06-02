@@ -515,8 +515,8 @@ if stp.last_pop:
     node_name = id_to_label(stp.last_pop["state"])
     st.markdown(
         f"Currently expanding **{node_name}** "
-        f"with cost vector **{pretty_vec(stp.last_pop['f'])}** "
-        f"and lex-key **{pretty_vec(stp.last_pop['key'])}**."
+        f"with estimated total cost **f = {pretty_vec(stp.last_pop['f'])}** "
+        f"and lexicographic queue key **{pretty_vec(stp.last_pop['key'])}**."
     )
 else:
     st.caption("No pop yet.")
