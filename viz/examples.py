@@ -1,5 +1,5 @@
 EXAMPLES = {
-    "2 paths: rulebook changes winner": """{
+    "2 nodes: rulebook changes winner": """{
   "rules": ["dist", "energy"],
   "rulebook": { "edges": [["dist", "energy"]] },
   "graph": {
@@ -15,7 +15,7 @@ EXAMPLES = {
   "eps": [0,0]
 }""",
 
-    "3 paths: incomparable rule": """{
+    "3 nodes: incomparable rule": """{
   "rules": ["r1", "r2", "r3", "r4"],
   "rulebook": { "edges": [["r1", "r2"], ["r1", "r3"]] },
   "graph": {
@@ -33,7 +33,7 @@ EXAMPLES = {
   "eps": [0,0,0,0]
 }""",
 
-    "6 paths: mixed tradeoffs": """{
+    "6 nodes: mixed paths w/ tradeoffs": """{
   "rules": ["safety", "dist", "energy"],
   "rulebook": { "edges": [["safety", "dist"], ["safety", "energy"]] },
   "graph": {
