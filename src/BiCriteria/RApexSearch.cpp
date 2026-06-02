@@ -93,7 +93,8 @@ void RApexSearch::operator()(size_t source, size_t target, Heuristic &heuristic,
         // get topo order for lex order display later
         trace_ << "{\"type\":\"meta\",\"solver\":\"RApex\",\"ordered_rules\":[";
 
-        auto ordered_rules = this -> rulebook_graph.get_ordered_rules();
+        auto ordered_rules = this->rulebook_graph.get_ordered_rules();
+
         for (size_t i = 0; i < ordered_rules.size(); ++i) {
             if (i > 0) trace_ << ",";
             trace_ << ordered_rules[i];
