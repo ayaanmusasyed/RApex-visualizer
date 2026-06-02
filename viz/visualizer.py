@@ -521,7 +521,26 @@ if stp.last_pop:
 else:
     st.caption("No pop yet.")
 
-st.subheader("OPEN (heap preview)")
+st.subheader("OPEN (Priority Queue)")
+# show key used in pq 
+ordered_rules = getattr(stp, "ordered_rules", None)
+
+if ordered_rules:
+    ordered_rule_names = [
+        rule_names[i] if 0 <= int(i) < len(rule_names) else f"r{i}"
+        for i in ordered_rules
+    ]
+
+    st.caption(
+        "Nodes in OPEN are ordered lexicographically by the rulebook topological order: "
+        + " → ".join(ordered_rule_names)
+    )
+else:
+    st.caption(
+        "Nodes in OPEN are ordered using the rulebook comparison key. "
+        "The exact topological order will appear after the trace metadata is loaded."
+    )
+
 open_rows = []
 for key, tb, it in stp.OPEN[:200]:
     f_unscaled = unscale_vec(it["f"])

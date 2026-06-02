@@ -15,7 +15,7 @@ class TraceStepper:
     tiebreak: Any
     last_pop: Dict | None
     events: list
-
+    ordered_rules: list | None = None
 
 def _keyer(fvec: List[Number]):
     return tuple(float(x) for x in fvec)
@@ -59,7 +59,12 @@ def apply_trace_step(stp: TraceStepper) -> None:
     t = evt.get("type")
 
     if t == "meta":
-        stp.events.append({"kind": "meta", "solver": evt.get("solver", "?")})
+        stp.ordered_rules = evt.get("ordered_rules")
+        stp.events.append({
+            "kind": "meta",
+            "solver": evt.get("solver", "?"),
+            "ordered_rules": evt.get("ordered_rules"),
+        })
         return
 
     if t == "pop":
