@@ -530,7 +530,7 @@ if not ordered_rules:
         if evt.get("type") == "meta" and evt.get("ordered_rules") is not None:
             ordered_rules = evt.get("ordered_rules")
             break
-        
+
 
 if ordered_rules:
     ordered_rule_names = [
@@ -659,5 +659,6 @@ with st.expander("Debug"):
     st.write("Collected solution vectors:", collect_goal_vectors(st.session_state.trace))
     st.write("Computed solution edges:", st.session_state.get("solution_edges", set()))
     st.write("Computed solution paths:", st.session_state.get("solution_paths", []))
+    st.write("Trace meta:", [e for e in st.session_state.get("trace", []) if e.get("type") == "meta"])
 
     
