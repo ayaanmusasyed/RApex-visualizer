@@ -525,6 +525,13 @@ st.subheader("OPEN (Priority Queue)")
 # show key used in pq 
 ordered_rules = getattr(stp, "ordered_rules", None)
 
+if not ordered_rules:
+    for evt in st.session_state.get("trace", []):
+        if evt.get("type") == "meta" and evt.get("ordered_rules") is not None:
+            ordered_rules = evt.get("ordered_rules")
+            break
+        
+
 if ordered_rules:
     ordered_rule_names = [
         rule_names[i] if 0 <= int(i) < len(rule_names) else f"r{i}"
