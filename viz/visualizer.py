@@ -546,7 +546,10 @@ for key, tb, it in stp.OPEN[:200]:
     f_unscaled = unscale_vec(it["f"])
     key_unscaled = unscale_vec(list(key))
 
-    row = {"state": id_to_label(it["state"]), "key": pretty_vec(key_unscaled)}
+    row = {
+        "state": id_to_label(it["state"]),
+        "lex key f": pretty_vec(key_unscaled),
+    }
 
     for i, x in enumerate(f_unscaled):
         row[f"f{i}"] = x
