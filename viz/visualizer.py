@@ -18,6 +18,83 @@ from algorithm_config import ALGORITHMS
 
 from examples import EXAMPLES 
 
+# ---- Functions for cycle detection w/ SCCs ----
+def find_sccs(rule_names, prec_df):
+    name_set = set(rule_names)
+    G = {r: [] for r in rule_names}
+    GR = {r: [] for r in rule_names}
+
+    for _, row in prec_df.iterrows():
+        a = str(row.get("Higher Priority", "")).strip()
+        b = str(row.get("Lower Priority", "")).strip()
+        if a in name_set and b in name_set:
+            G[a].append(b)
+            GR[b].append(a)
+
+    seen = set()
+    order = []
+
+    def dfs(u):
+        seen.add(u)
+        for v in G[u]:
+            if v not in seen:
+                dfs(v)
+        order.append(u)
+
+    for r in rule_names:
+        if r not in seen:
+            dfs(r)
+
+    seen.clear()
+    comps = []
+
+    def rdfs(u, comp):
+        seen.add(u)
+        comp.append(u)
+        for v in GR[u]:
+            if v not in seen:
+                rdfs(v, comp)
+
+    for r in reversed(order):
+        if r not in seen:
+            comp = []
+            rdfs(r, comp)
+            comps.append(comp)
+
+    return [c for c in comps if len(c) > 1]
+
+
+def edges_inside_component(prec_df, comp):
+    comp = set(comp)
+    out = []
+    for idx, row in prec_df.iterrows():
+        a = str(row.get("Higher Priority", "")).strip()
+        b = str(row.get("Lower Priority", "")).strip()
+        if a in comp and b in comp:
+            out.append((idx, a, b))
+    return out
+
+
+def remove_internal_cycle_edges(prec_df, comp):
+    comp = set(comp)
+    keep_rows = []
+    for _, row in prec_df.iterrows():
+        a = str(row.get("Higher Priority", "")).strip()
+        b = str(row.get("Lower Priority", "")).strip()
+        if not (a in comp and b in comp):
+            keep_rows.append(row)
+    return pd.DataFrame(keep_rows, columns=prec_df.columns)
+
+
+def collapse_cycle_to_equivalence_class(prec_df, comp):
+    """
+    UI-side approximation:
+    remove all priority edges inside the cycle.
+    The rules remain separate columns, but no longer claim priority over each other.
+    This represents 'same priority' at the UI level.
+    """
+    return remove_internal_cycle_edges(prec_df, comp)
+# -----------------------------------------------
 def allowed_algorithms(k):
     out = []
     for name, cfg in ALGORITHMS.items():
@@ -327,6 +404,53 @@ with tab_tool:
     st.caption("Direct edges define priority. Rules with no arrows are incomparable.")
     st.graphviz_chart(dot_for_rule_graph(rule_names, prec_df))
 
+    # ---- Cycle warning -------
+    cycle_components = find_sccs(rule_names, prec_df)
+
+    if cycle_components:
+        st.error("Cycle detected in the rulebook.")
+
+        for comp in cycle_components:
+            st.markdown(
+                "**Involved rules:** " + ", ".join(f"`{r}`" for r in comp)
+            )
+
+            internal_edges = edges_inside_component(prec_df, comp)
+
+            if len(comp) == 2:
+                st.warning(
+                    "This is a 2-rule mutual cycle. If these rules are meant to have equal priority, "
+                    "make that equivalence explicit in the rulebook/model. For now, remove one or both "
+                    "priority edges before running."
+                )
+            else:
+                st.warning(
+                    "For 3 or more rules, this cycle is ambiguous. You can either collapse the involved "
+                    "rules into one equal-priority group, or manually remove edges to make the rulebook acyclic."
+                )
+
+                c_a, c_b = st.columns(2)
+
+                if c_a.button(
+                    "Treat involved rules as same priority",
+                    key=f"collapse_{'_'.join(comp)}"
+                ):
+                    st.session_state.prec_df = collapse_cycle_to_equivalence_class(prec_df, comp)
+                    st.rerun()
+
+                if c_b.button(
+                    "Show edges to edit manually",
+                    key=f"show_edges_{'_'.join(comp)}"
+                ):
+                    st.session_state[f"show_cycle_edges_{'_'.join(comp)}"] = True
+
+                if st.session_state.get(f"show_cycle_edges_{'_'.join(comp)}", False):
+                    st.markdown("Edges involved in the cycle:")
+                    for _, a, b in internal_edges:
+                        st.markdown(f"- `{a} > {b}`")
+
+        st.stop()
+    # --------------------------
     st.header("Problem graph edges")
 
     need_cols = ["u", "v"] + [f"c{i}" for i in range(k)]
