@@ -19,6 +19,7 @@ from algorithm_config import ALGORITHMS
 from examples import EXAMPLES 
 
 # ---- Functions for cycle detection w/ SCCs ----
+# Used Kosaraju's Alg 
 def find_sccs(rule_names, prec_df):
     name_set = set(rule_names)
     G = {r: [] for r in rule_names}
