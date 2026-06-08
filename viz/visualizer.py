@@ -418,11 +418,56 @@ with tab_tool:
             internal_edges = edges_inside_component(prec_df, comp)
 
             if len(comp) == 2:
+                r1, r2 = comp
+
                 st.warning(
-                    "This is a 2-rule mutual cycle. If these rules are meant to have equal priority, "
-                    "make that equivalence explicit in the rulebook/model. For now, remove one or both "
-                    "priority edges before running."
+                    f"Rules `{r1}` and `{r2}` currently claim priority over each other."
                 )
+
+                st.markdown(
+                    """
+            Choose one:
+
+            **A)** Treat the two rules as having equal priority.
+
+            **B)** Remove one of the conflicting preferences.
+            """
+                )
+
+                c1, c2, c3 = st.columns(3)
+
+                if c1.button(
+                    f"Treat {r1} and {r2} as equal priority",
+                    key=f"eq_{r1}_{r2}"
+                ):
+                    st.session_state.prec_df = collapse_cycle_to_equivalence_class(
+                        prec_df,
+                        comp
+                    )
+                    st.rerun()
+
+                # find the two cycle edges
+                edge_lookup = {(a, b): idx for idx, a, b in internal_edges}
+
+                if (r1, r2) in edge_lookup:
+                    if c2.button(
+                        f"Remove {r1} > {r2}",
+                        key=f"remove_{r1}_{r2}"
+                    ):
+                        st.session_state.prec_df = prec_df.drop(
+                            edge_lookup[(r1, r2)]
+                        ).reset_index(drop=True)
+                        st.rerun()
+
+                if (r2, r1) in edge_lookup:
+                    if c3.button(
+                        f"Remove {r2} > {r1}",
+                        key=f"remove_{r2}_{r1}"
+                    ):
+                        st.session_state.prec_df = prec_df.drop(
+                            edge_lookup[(r2, r1)]
+                        ).reset_index(drop=True)
+                        st.rerun()
             else:
                 st.warning(
                     "For 3 or more rules, this cycle is ambiguous. You can either collapse the involved "
