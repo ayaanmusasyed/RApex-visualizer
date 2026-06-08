@@ -787,6 +787,7 @@ with tab_tool:
         st.caption("No pop yet.")
 
     st.subheader("OPEN (Priority Queue)")
+    st.caption("Nodes in the priority queue have a key f, where f = g + h. g is the cost to reach node thus far and h is a heuristic to represent the estimated cost to go.")
     # show key used in pq 
     ordered_rules = getattr(stp, "ordered_rules", None)
 
@@ -820,7 +821,7 @@ with tab_tool:
 
         row = {
             "state": id_to_label(it["state"]),
-            "lex key f": pretty_vec(key_unscaled),
+            "f + g + h": pretty_vec(key_unscaled),
         }
 
         for i, x in enumerate(f_unscaled):
