@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from solution_utils import compute_rulebook_nondominated_paths
+from core.solution_utils import compute_rulebook_nondominated_paths
 
 def render_problem_graph_section(k, rule_names, start_label, goal_label, prec_df, eps):
 

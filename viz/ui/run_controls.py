@@ -1,6 +1,6 @@
 import streamlit as st
 
-from backend_runner import run_algorithm
+from backend.backend_runner import run_algorithm
 
 def render_run_controls(
     mode,
