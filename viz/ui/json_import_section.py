@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import pandas as pd
 
-from examples import EXAMPLES
+from examples.examples import EXAMPLES
 # ------------ JSON input ----------
 def rulebook_layers_to_edges(layers):
     edges = []
