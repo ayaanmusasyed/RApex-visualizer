@@ -1,3 +1,5 @@
+import streamlit as st
+
 # function to get the name of a node from its id 
 def id_to_label(state_id: int) -> str:
     name_to_id = st.session_state.get("name_to_id", {})
