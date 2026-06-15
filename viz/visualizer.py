@@ -1,20 +1,9 @@
-# viz/visualizer.py
-
 import json
 import streamlit as st
 import pandas as pd
 
-from trace_utils import apply_trace_step, init_from_trace, extract_realization
-from render_utils import unscale_vec, pretty_vec
-from solution_utils import (
-    collect_goal_vectors,
-    collect_final_solution_pairs,
-    compute_rulebook_nondominated_paths,
-)
-from backend_runner import run_algorithm
-
-
-from algorithm_config import ALGORITHMS
+from backend.backend_runner import run_algorithm
+from backend.algorithm_config import ALGORITHMS
 
 from examples import EXAMPLES 
 
@@ -25,6 +14,13 @@ from core.rulebook_cycles import (
 )
 from core.algorithm_rules import allowed_algorithms
 from core.labels import id_to_label
+from core.trace_utils import apply_trace_step, init_from_trace, extract_realization
+from core.solution_utils import (
+    collect_goal_vectors,
+    collect_final_solution_pairs,
+    compute_rulebook_nondominated_paths,
+)
+from core.formatting import unscale_vec, pretty_vec
 
 from ui.rulebook_section import render_rulebook_section
 from ui.json_import_section import render_json_import_section

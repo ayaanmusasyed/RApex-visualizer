@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-from trace_utils import apply_trace_step, init_from_trace, extract_realization
+from core.trace_utils import apply_trace_step, init_from_trace, extract_realization
 from render_utils import unscale_vec, pretty_vec
 from render.graphviz_render import dot_for_graph
-from solution_utils import collect_goal_vectors, collect_final_solution_pairs
+from core.solution_utils import collect_goal_vectors, collect_final_solution_pairs
 from core.labels import id_to_label
 
 def render_single_run_view(edges_df, rule_names):
