@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 
 from trace_utils import apply_trace_step, init_from_trace, extract_realization
-from render_utils import unscale_vec, pretty_vec, dot_for_graph, dot_for_rule_graph
+from render_utils import unscale_vec, pretty_vec
 from solution_utils import (
     collect_goal_vectors,
     collect_final_solution_pairs,
@@ -26,6 +26,7 @@ from core.rulebook_cycles import (
 
 from ui.RAstarpex_info_tab import render_RAstarpex_info_tab
 
+from render.graphviz_render import dot_for_graph, dot_for_rule_graph
 # -----------------------------------------------
 def allowed_algorithms(k):
     out = []
