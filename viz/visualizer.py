@@ -27,16 +27,9 @@ from core.rulebook_cycles import (
 from ui.RAstarpex_info_tab import render_RAstarpex_info_tab
 
 from render.graphviz_render import dot_for_graph, dot_for_rule_graph
-# -----------------------------------------------
-def allowed_algorithms(k):
-    out = []
-    for name, cfg in ALGORITHMS.items():
-        max_k = cfg["max_k"]
-        min_k = cfg["min_k"]
-        if k >= min_k and (max_k is None or k <= max_k):
-            out.append(name)
-    return out
 
+from core.algorithm_rules import allowed_algorithms
+# -----------------------------------------------
 def id_to_label(state_id: int) -> str:
     name_to_id = st.session_state.get("name_to_id", {})
     rev = {v: k for k, v in name_to_id.items()}
