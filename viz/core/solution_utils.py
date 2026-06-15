@@ -1,4 +1,4 @@
-from trace_utils import extract_realization
+from core.trace_utils import extract_realization
 from render.graphviz_render import unscale_vec
 
 
