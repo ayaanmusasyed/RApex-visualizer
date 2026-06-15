@@ -5,7 +5,7 @@ import pandas as pd
 from backend.backend_runner import run_algorithm
 from backend.algorithm_config import ALGORITHMS
 
-from examples import EXAMPLES 
+from examples.examples import EXAMPLES 
 
 from core.rulebook_cycles import (
     find_sccs,
