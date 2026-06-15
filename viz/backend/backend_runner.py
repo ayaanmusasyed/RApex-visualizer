@@ -4,9 +4,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from io_utils import build_node_ids, write_queries_txt, write_rules_txt, write_gr_files
-from trace_utils import init_from_trace, parse_trace_lines
-from solution_utils import (
+from core.io_utils import build_node_ids, write_queries_txt, write_rules_txt, write_gr_files
+from core.trace_utils import init_from_trace, parse_trace_lines
+from core.solution_utils import (
     compute_solution_edges,
     compute_solution_paths,
     compute_candidate_paths,

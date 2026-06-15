@@ -1,5 +1,5 @@
 from trace_utils import extract_realization
-from render_utils import unscale_vec
+from render.graphviz_render import unscale_vec
 
 
 def approx_equal_vec(a, b, tol=1e-4):

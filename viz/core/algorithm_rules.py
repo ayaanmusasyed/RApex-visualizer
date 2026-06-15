@@ -1,4 +1,4 @@
-from algorithm_config import ALGORITHMS
+from backend.algorithm_config import ALGORITHMS
 
 def allowed_algorithms(k):
     out = []
