@@ -29,13 +29,8 @@ from ui.RAstarpex_info_tab import render_RAstarpex_info_tab
 from render.graphviz_render import dot_for_graph, dot_for_rule_graph
 
 from core.algorithm_rules import allowed_algorithms
-# -----------------------------------------------
-def id_to_label(state_id: int) -> str:
-    name_to_id = st.session_state.get("name_to_id", {})
-    rev = {v: k for k, v in name_to_id.items()}
-    return rev.get(state_id, str(state_id))
 
-
+from core.labels import id_to_label
 # ---------------- UI ----------------
 
 st.set_page_config(page_title="RApex Visualizer", layout="wide")
