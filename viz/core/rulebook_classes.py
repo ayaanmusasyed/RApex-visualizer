@@ -35,6 +35,8 @@ def collapse_rules_into_class(eq_classes, rules_to_collapse):
     return remaining + [merged]
 
 
+import pandas as pd
+
 # Remove priority edges inside a new equivalence class.
 def remove_edges_inside_classes(prec_df, eq_classes):
     rows = []
@@ -49,6 +51,9 @@ def remove_edges_inside_classes(prec_df, eq_classes):
         if hi_class is not None and hi_class == lo_class:
             continue
 
-        rows.append(row)
+        rows.append({
+            "Higher Priority": hi,
+            "Lower Priority": lo,
+        })
 
-    return prec_df.iloc[0:0].append(rows, ignore_index=True) if rows else prec_df.iloc[0:0]
+    return pd.DataFrame(rows, columns=["Higher Priority", "Lower Priority"])
