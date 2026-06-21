@@ -78,20 +78,6 @@ with tab_tool:
         k, rule_names, start_label, goal_label, prec_df, eps
     )
 
-    render_run_controls(
-        mode,
-        edges_df,
-        rule_names,
-        eps,
-        prec_df,
-        start_label,
-        goal_label,
-        cutoff,
-        merge,
-        algo_left,
-        algo_right,
-    )
-
     # ---------------- Run buttons ----------------
     render_run_controls(
         mode,
