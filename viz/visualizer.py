@@ -73,6 +73,7 @@ with tab_tool:
     algo_right = controls["algo_right"]
 
     prec_df = render_rulebook_section(rule_names)
+    render_run_controls(prec_df)
     
     edges_df = render_problem_graph_section(
         k, rule_names, start_label, goal_label, prec_df, eps
