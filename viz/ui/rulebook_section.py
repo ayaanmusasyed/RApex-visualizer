@@ -16,6 +16,8 @@ from core.rulebook_state import (
     delete_rulebook_edge,
 )
 
+from render.cytoscape_rulebook import rulebook_to_cytoscape_elements
+
 def render_rulebook_section(rule_names):
     st.header("Rule precedence graph")
     st.caption("State rule graph edges to explicitly define rule priority. Rules with no edges remain incomparable.")
@@ -80,6 +82,12 @@ def render_rulebook_section(rule_names):
                     st.rerun()
             else:
                 st.caption("No rulebook edges to delete.")
+    
+    # --- Cytoscape Converter Debug ----
+    with st.expander("Debug: Cytoscape elements"):
+        st.json(rulebook_to_cytoscape_elements(rule_names, prec_df))
+
+        
     # ---- Cycle warning -------
     cycle_components = find_sccs(rule_names, prec_df)
 
