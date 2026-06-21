@@ -10,6 +10,12 @@ from core.rulebook_cycles import (
 
 from core.rulebook_state import normalize_prec_df
 
+from core.rulebook_state import (
+    normalize_prec_df,
+    add_rulebook_edge,
+    delete_rulebook_edge,
+)
+
 def render_rulebook_section(rule_names):
     st.header("Rule precedence graph")
     st.caption("State rule graph edges to explicitly define rule priority. Rules with no edges remain incomparable.")
@@ -31,6 +37,49 @@ def render_rulebook_section(rule_names):
     st.caption("Direct edges define priority. Rules with no arrows are incomparable.")
     st.graphviz_chart(dot_for_rule_graph(rule_names, prec_df))
 
+    # --- Debug for rulebook state functions --- 
+    with st.expander("Debug: rulebook state actions"):
+        c1, c2 = st.columns(2)
+
+        with c1:
+            add_hi = st.selectbox("Higher rule", rule_names, key="debug_add_hi")
+            add_lo = st.selectbox("Lower rule", rule_names, key="debug_add_lo")
+
+            if st.button("Debug add edge", key="debug_add_rulebook_edge"):
+                try:
+                    st.session_state.prec_df = add_rulebook_edge(
+                        st.session_state.prec_df,
+                        add_hi,
+                        add_lo,
+                    )
+                    st.rerun()
+                except Exception as e:
+                    st.warning(str(e))
+
+        with c2:
+            if len(prec_df) > 0:
+                edge_labels = [
+                    f"{row['Higher Priority']} > {row['Lower Priority']}"
+                    for _, row in prec_df.iterrows()
+                ]
+
+                selected_edge = st.selectbox(
+                    "Edge to delete",
+                    edge_labels,
+                    key="debug_delete_edge_select",
+                )
+
+                if st.button("Debug delete edge", key="debug_delete_rulebook_edge"):
+                    hi, lo = selected_edge.split(" > ")
+
+                    st.session_state.prec_df = delete_rulebook_edge(
+                        st.session_state.prec_df,
+                        hi,
+                        lo,
+                    )
+                    st.rerun()
+            else:
+                st.caption("No rulebook edges to delete.")
     # ---- Cycle warning -------
     cycle_components = find_sccs(rule_names, prec_df)
 
