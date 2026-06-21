@@ -8,6 +8,8 @@ from core.rulebook_cycles import (
     collapse_cycle_to_equivalence_class,
 )
 
+from core.rulebook_state import normalize_prec_df
+
 def render_rulebook_section(rule_names):
     st.header("Rule precedence graph")
     st.caption("State rule graph edges to explicitly define rule priority. Rules with no edges remain incomparable.")
@@ -20,7 +22,11 @@ def render_rulebook_section(rule_names):
         use_container_width=True,
         num_rows="dynamic"
     )
-    st.session_state.prec_df = prec_df
+
+    # Clean table edits before using the rulebook anywhere else.
+    st.session_state.prec_df = normalize_prec_df(prec_df)
+    prec_df = st.session_state.prec_df
+    
     st.subheader("Rule graph preview")
     st.caption("Direct edges define priority. Rules with no arrows are incomparable.")
     st.graphviz_chart(dot_for_rule_graph(rule_names, prec_df))
