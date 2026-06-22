@@ -6,6 +6,7 @@ from core.formatting import unscale_vec, pretty_vec
 from render.graphviz_render import dot_for_graph
 from core.solution_utils import collect_goal_vectors, collect_final_solution_pairs
 from core.labels import id_to_label
+from core.rulebook_classes import class_label
 
 def render_single_run_view(edges_df, rule_names):
     if "trace_stepper" not in st.session_state:
@@ -108,10 +109,34 @@ def render_single_run_view(edges_df, rule_names):
 
 
     if ordered_rules:
-        ordered_rule_names = [
-            rule_names[i] if 0 <= int(i) < len(rule_names) else f"r{i}"
-            for i in ordered_rules
-        ]
+        from core.rulebook_classes import class_label
+
+        ordered_labels = []
+
+        for idx in ordered_rules:
+            idx = int(idx)
+
+            found = False
+
+            for cls in st.session_state.get("eq_classes", []):
+                if rule_names[idx] in cls:
+                    ordered_labels.append(class_label(cls))
+                    found = True
+                    break
+
+            if not found:
+                ordered_labels.append(rule_names[idx])
+
+
+        # Remove duplicates because multiple rules from the same
+        # equivalence class may appear in the ordering.
+        seen = set()
+        ordered_rule_names = []
+
+        for label in ordered_labels:
+            if label not in seen:
+                seen.add(label)
+                ordered_rule_names.append(label)
 
         st.caption(
             "Nodes in OPEN are ordered lexicographically by the rulebook topological order: "
