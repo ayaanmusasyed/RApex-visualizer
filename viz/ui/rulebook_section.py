@@ -103,6 +103,11 @@ def render_rulebook_section(rule_names):
 
         if node_id.startswith("class_"):
             class_idx = int(node_id.replace("class_", ""))
+
+            if class_idx >= len(st.session_state.eq_classes):
+                st.caption("Selection is stale after the rulebook changed. Click a node again.")
+                return prec_df
+
             selected_class = st.session_state.eq_classes[class_idx]
 
             st.subheader("Selected rule class")
