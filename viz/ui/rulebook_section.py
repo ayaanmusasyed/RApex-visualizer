@@ -20,6 +20,13 @@ from render.cytoscape_rulebook import rulebook_to_cytoscape_elements
 
 from core.rulebook_classes import default_eq_classes, class_label
 
+from core.rulebook_classes import (
+    default_eq_classes,
+    class_label,
+    collapse_rules_into_class,
+    remove_edges_inside_classes,
+)
+
 def render_rulebook_section(rule_names):
 
     # Keep same-priority rule groups in session state.
@@ -149,10 +156,18 @@ def render_rulebook_section(rule_names):
                     f"Treat {r1} and {r2} as equal priority",
                     key=f"eq_{r1}_{r2}"
                 ):
-                    st.session_state.prec_df = collapse_cycle_to_equivalence_class(
-                        prec_df,
-                        comp
+                    # Collapse the cycle into a real same-priority class.
+                    st.session_state.eq_classes = collapse_rules_into_class(
+                        st.session_state.eq_classes,
+                        comp,
                     )
+
+                    # Remove priority edges inside that same-priority class.
+                    st.session_state.prec_df = remove_edges_inside_classes(
+                        prec_df,
+                        st.session_state.eq_classes,
+                    )
+
                     st.rerun()
 
                 # find the two cycle edges
@@ -189,7 +204,18 @@ def render_rulebook_section(rule_names):
                     "Treat involved rules as same priority",
                     key=f"collapse_{'_'.join(comp)}"
                 ):
-                    st.session_state.prec_df = collapse_cycle_to_equivalence_class(prec_df, comp)
+                    # Collapse all rules in this cycle into one same-priority class.
+                    st.session_state.eq_classes = collapse_rules_into_class(
+                        st.session_state.eq_classes,
+                        comp,
+                    )
+
+                    # Remove priority edges inside that same-priority class.
+                    st.session_state.prec_df = remove_edges_inside_classes(
+                        prec_df,
+                        st.session_state.eq_classes,
+                    )
+
                     st.rerun()
 
                 if c_b.button(
