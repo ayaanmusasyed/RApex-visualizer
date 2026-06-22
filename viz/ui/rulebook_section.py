@@ -39,6 +39,8 @@ from core.rulebook_edit import (
     delete_class_edge,
 )
 
+from core.rulebook_classes import find_class_index
+
 def render_rulebook_section(rule_names):
 
     # Keep same-priority rule groups in session state.
@@ -106,6 +108,48 @@ def render_rulebook_section(rule_names):
             st.subheader("Selected rule class")
             st.write(f"Class {class_idx}: `{class_label(selected_class)}`")
             
+            outgoing = []
+            incoming = []
+
+            for _, row in st.session_state.prec_df.iterrows():
+                hi = str(row["Higher Priority"]).strip()
+                lo = str(row["Lower Priority"]).strip()
+
+                hi_idx = find_class_index(st.session_state.eq_classes, hi)
+                lo_idx = find_class_index(st.session_state.eq_classes, lo)
+
+                if hi_idx == class_idx:
+                    outgoing.append(lo_idx)
+
+                if lo_idx == class_idx:
+                    incoming.append(hi_idx)
+
+            st.caption("Current priority relations for selected class:")
+
+            if outgoing:
+                st.write(
+                    "Higher than: "
+                    + ", ".join(
+                        f"`{class_label(st.session_state.eq_classes[i])}`"
+                        for i in sorted(set(outgoing))
+                        if i is not None
+                    )
+                )
+            else:
+                st.write("Higher than: none")
+
+            if incoming:
+                st.write(
+                    "Lower than: "
+                    + ", ".join(
+                        f"`{class_label(st.session_state.eq_classes[i])}`"
+                        for i in sorted(set(incoming))
+                        if i is not None
+                    )
+                )
+            else:
+                st.write("Lower than: none")
+
             if len(selected_class) == 1:
                 st.caption("This is a single-rule class.")
             else:
