@@ -33,6 +33,12 @@ from render.cytoscape_render import (
     rulebook_cytoscape_stylesheet,
 )
 
+from core.rulebook_edit import (
+    split_equivalence_class,
+    add_class_edge,
+    delete_class_edge,
+)
+
 def render_rulebook_section(rule_names):
 
     # Keep same-priority rule groups in session state.
@@ -99,12 +105,71 @@ def render_rulebook_section(rule_names):
 
             st.subheader("Selected rule class")
             st.write(f"Class {class_idx}: `{class_label(selected_class)}`")
-
+            
             if len(selected_class) == 1:
                 st.caption("This is a single-rule class.")
             else:
                 st.caption("This is a same-priority equivalence class.")
                 
+            other_class_options = [
+                i for i in range(len(st.session_state.eq_classes))
+                if i != class_idx
+            ]
+
+            if other_class_options:
+                target_idx = st.selectbox(
+                    "Target class",
+                    other_class_options,
+                    format_func=lambda i: class_label(st.session_state.eq_classes[i]),
+                    key="cyto_target_class",
+                )
+
+                c1, c2 = st.columns(2)
+
+                if c1.button("Add selected > target", key="cyto_add_out_edge"):
+                    try:
+                        st.session_state.prec_df = add_class_edge(
+                            st.session_state.prec_df,
+                            st.session_state.eq_classes,
+                            class_idx,
+                            target_idx,
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        st.warning(str(e))
+
+                if c2.button("Add target > selected", key="cyto_add_in_edge"):
+                    try:
+                        st.session_state.prec_df = add_class_edge(
+                            st.session_state.prec_df,
+                            st.session_state.eq_classes,
+                            target_idx,
+                            class_idx,
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        st.warning(str(e))
+
+                if st.button("Delete edge selected > target", key="cyto_delete_out_edge"):
+                    st.session_state.prec_df = delete_class_edge(
+                        st.session_state.prec_df,
+                        st.session_state.eq_classes,
+                        class_idx,
+                        target_idx,
+                    )
+                    st.rerun()
+
+            if len(selected_class) > 1:
+                if st.button("Split equivalence class", key="cyto_split_class"):
+                    try:
+                        st.session_state.eq_classes = split_equivalence_class(
+                            st.session_state.eq_classes,
+                            class_idx,
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        st.warning(str(e))
+
     with st.expander("Same-priority groups"):
         st.caption("Rules in the same bracket are treated as equivalent priority.")
 
