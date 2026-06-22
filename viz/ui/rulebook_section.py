@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from render.graphviz_render import dot_for_rule_graph
+from render.graphviz_render import dot_for_rule_graph, dot_for_rule_class_graph
 from core.rulebook_cycles import (
     find_sccs,
     edges_inside_component,

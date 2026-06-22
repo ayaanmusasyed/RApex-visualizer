@@ -121,3 +121,46 @@ def dot_for_rule_graph(rule_names, prec_df):
 
     lines.append("}")
     return "\n".join(lines)
+
+
+# Draw the rulebook using equivalence classes as graph nodes.
+def dot_for_rule_class_graph(rule_names, prec_df, eq_classes):
+    from core.rulebook_classes import class_label, find_class_index
+
+    lines = [
+        "digraph Rulebook {",
+        'rankdir="TB";',
+        "node [shape=box, style=filled, fillcolor=white, fontname=Helvetica];",
+        "edge [fontname=Helvetica];",
+    ]
+
+    for i, cls in enumerate(eq_classes):
+        lines.append(f'"class_{i}" [label="{class_label(cls)}"];')
+
+    seen_edges = set()
+
+    if prec_df is not None:
+        for _, row in prec_df.iterrows():
+            hi = str(row.get("Higher Priority", "")).strip()
+            lo = str(row.get("Lower Priority", "")).strip()
+
+            hi_i = find_class_index(eq_classes, hi)
+            lo_i = find_class_index(eq_classes, lo)
+
+            if hi_i is None or lo_i is None:
+                continue
+
+            if hi_i == lo_i:
+                continue
+
+            edge = (hi_i, lo_i)
+
+            if edge in seen_edges:
+                continue
+
+            seen_edges.add(edge)
+
+            lines.append(f'"class_{hi_i}" -> "class_{lo_i}";')
+
+    lines.append("}")
+    return "\n".join(lines)
