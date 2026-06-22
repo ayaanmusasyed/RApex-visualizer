@@ -27,6 +27,12 @@ from core.rulebook_classes import (
     remove_edges_inside_classes,
 )
 
+from streamlit_cytoscapejs import st_cytoscapejs
+from render.cytoscape_render import (
+    rulebook_class_cytoscape_elements,
+    rulebook_cytoscape_stylesheet,
+)
+
 def render_rulebook_section(rule_names):
 
     # Keep same-priority rule groups in session state.
@@ -70,7 +76,20 @@ def render_rulebook_section(rule_names):
         )
     )
 
-
+    st.subheader("Interactive rulebook preview")
+    selected = st_cytoscapejs(
+        elements=rulebook_class_cytoscape_elements(
+            rule_names,
+            prec_df,
+            st.session_state.eq_classes,
+        ),
+        stylesheet=rulebook_cytoscape_stylesheet(),
+        layout={"name": "breadthfirst", "directed": True, "spacingFactor": 1.5},
+        height="350px",
+        key="rulebook_cytoscape",
+    )
+    st.write("Selected:", selected)
+    
     with st.expander("Same-priority groups"):
         st.caption("Rules in the same bracket are treated as equivalent priority.")
 
