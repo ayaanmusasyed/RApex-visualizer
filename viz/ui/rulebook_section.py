@@ -84,12 +84,13 @@ def render_rulebook_section(rule_names):
             st.session_state.eq_classes,
         ),
         stylesheet=rulebook_cytoscape_stylesheet(),
-        layout={"name": "breadthfirst", "directed": True, "spacingFactor": 1.5},
-        height="350px",
+        width=700,
+        height=350,
         key="rulebook_cytoscape",
     )
+
     st.write("Selected:", selected)
-    
+
     with st.expander("Same-priority groups"):
         st.caption("Rules in the same bracket are treated as equivalent priority.")
 
