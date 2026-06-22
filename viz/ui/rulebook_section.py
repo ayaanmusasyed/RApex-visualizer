@@ -18,7 +18,25 @@ from core.rulebook_state import (
 
 from render.cytoscape_rulebook import rulebook_to_cytoscape_elements
 
+from core.rulebook_classes import default_eq_classes, class_label
+
 def render_rulebook_section(rule_names):
+
+    # Keep same-priority rule groups in session state.
+    if "eq_classes" not in st.session_state:
+        st.session_state.eq_classes = default_eq_classes(rule_names)
+
+    # If the rule list changes, reset classes for now.
+    # Later we can make this smarter for rename/add/delete.
+    flat_rules = {
+        rule
+        for cls in st.session_state.eq_classes
+        for rule in cls
+    }
+
+    if set(rule_names) != flat_rules:
+        st.session_state.eq_classes = default_eq_classes(rule_names)
+
     st.header("Rule precedence graph")
     st.caption("State rule graph edges to explicitly define rule priority. Rules with no edges remain incomparable.")
     if "prec_df" not in st.session_state:
@@ -39,6 +57,13 @@ def render_rulebook_section(rule_names):
     st.caption("Direct edges define priority. Rules with no arrows are incomparable.")
     st.graphviz_chart(dot_for_rule_graph(rule_names, prec_df))
 
+
+    with st.expander("Same-priority groups"):
+        st.caption("Rules in the same bracket are treated as equivalent priority.")
+
+        for i, cls in enumerate(st.session_state.eq_classes):
+            st.write(f"Class {i}: `{class_label(cls)}`")
+        
     # --- Debug for rulebook state functions --- 
     with st.expander("Debug: rulebook state actions"):
         c1, c2 = st.columns(2)
@@ -87,7 +112,7 @@ def render_rulebook_section(rule_names):
     with st.expander("Debug: Cytoscape elements"):
         st.json(rulebook_to_cytoscape_elements(rule_names, prec_df))
 
-        
+
     # ---- Cycle warning -------
     cycle_components = find_sccs(rule_names, prec_df)
 
