@@ -90,7 +90,21 @@ def render_rulebook_section(rule_names):
     )
 
     st.write("Selected:", selected)
+    if selected and "selected_node_id" in selected:
+        node_id = selected["selected_node_id"]
 
+        if node_id.startswith("class_"):
+            class_idx = int(node_id.replace("class_", ""))
+            selected_class = st.session_state.eq_classes[class_idx]
+
+            st.subheader("Selected rule class")
+            st.write(f"Class {class_idx}: `{class_label(selected_class)}`")
+
+            if len(selected_class) == 1:
+                st.caption("This is a single-rule class.")
+            else:
+                st.caption("This is a same-priority equivalence class.")
+                
     with st.expander("Same-priority groups"):
         st.caption("Rules in the same bracket are treated as equivalent priority.")
 
