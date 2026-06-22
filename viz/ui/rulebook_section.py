@@ -62,7 +62,13 @@ def render_rulebook_section(rule_names):
     
     st.subheader("Rule graph preview")
     st.caption("Direct edges define priority. Rules with no arrows are incomparable.")
-    st.graphviz_chart(dot_for_rule_graph(rule_names, prec_df))
+    st.graphviz_chart(
+        dot_for_rule_class_graph(
+            rule_names,
+            prec_df,
+            st.session_state.eq_classes,
+        )
+    )
 
 
     with st.expander("Same-priority groups"):
