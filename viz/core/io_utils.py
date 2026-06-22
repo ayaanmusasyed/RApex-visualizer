@@ -49,14 +49,24 @@ def write_queries_txt(path: Path, s_id: int, t_id: int):
     path.write_text(f"{s_id},{t_id}\n", encoding="utf-8")
 
 
-def write_rules_txt(path: Path, rule_names: List[str], eps: List[float], precedence_edges_df: pd.DataFrame):
+def write_rules_txt(path: Path, rule_names: List[str], eps: List[float], precedence_edges_df: pd.DataFrame, eq_classes=None):
 
     k = len(rule_names)
 
     if len(eps) != k:
         raise ValueError("eps length must match rules")
 
-    eq_classes = [[i] for i in range(k)]
+   # Convert rule-name equivalence classes into rule-index equivalence classes.
+    if eq_classes is None:
+        eq_classes_idx = [[i] for i in range(k)]
+    else:
+        eq_classes_idx = []
+        for cls in eq_classes:
+            idx_cls = [
+                _normalize_rule_name_or_index(rule, rule_names)
+                for rule in cls
+            ]
+            eq_classes_idx.append(idx_cls)
 
     rels = []
 
@@ -83,9 +93,9 @@ def write_rules_txt(path: Path, rule_names: List[str], eps: List[float], precede
     lines.append(str(k))
     lines.append(" ".join(str(float(x)) for x in eps))
 
-    lines.append(str(len(eq_classes)))
+    lines.append(str(len(eq_classes_idx)))
 
-    for cls in eq_classes:
+    for cls in eq_classes_idx:
         lines.append(str(len(cls)) + " " + " ".join(str(i) for i in cls))
 
     lines.append(str(len(rels)))

@@ -65,6 +65,7 @@ def run_algorithm(
     goal_label,
     cutoff,
     merge,
+    eq_classes=None,
 ):
     if len(rule_names) != len(eps):
         raise ValueError("Rule names count must match epsilon length.")
@@ -88,7 +89,7 @@ def run_algorithm(
         queries_path = td / "queries.txt"
 
         write_queries_txt(queries_path, s_id, t_id)
-        write_rules_txt(rules_path, rule_names, eps, prec_df)
+        write_rules_txt(rules_path, rule_names, eps, prec_df, eq_classes)
         gr_paths = write_gr_files(td, edges_df, name_to_id, k)
 
         cmd = [

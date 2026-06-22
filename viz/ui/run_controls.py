@@ -14,6 +14,7 @@ def render_run_controls(
     merge,
     algo_left=None,
     algo_right=None,
+    eq_classes = None, 
 ):
     if mode == "Single Run":
         run_btn = st.button("Run RApex")
@@ -30,6 +31,7 @@ def render_run_controls(
                     goal_label=goal_label,
                     cutoff=cutoff,
                     merge=merge,
+                    eq_classes=eq_classes,
                 )
 
                 st.session_state.trace = result["trace"]
@@ -62,6 +64,7 @@ def render_run_controls(
                     goal_label=goal_label,
                     cutoff=cutoff,
                     merge=merge,
+                    eq_classes=eq_classes,
                 )
 
                 right = run_algorithm(
@@ -74,6 +77,7 @@ def render_run_controls(
                     goal_label=goal_label,
                     cutoff=cutoff,
                     merge=merge,
+                    eq_classes=eq_classes,
                 )
 
                 st.session_state.compare_left = left

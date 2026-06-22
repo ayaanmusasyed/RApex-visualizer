@@ -91,6 +91,7 @@ with tab_tool:
         merge,
         algo_left,
         algo_right,
+        eq_classes=st.session_state.get("eq_classes"),
     )
 
     # ---------------- Compare mode display ----------------
