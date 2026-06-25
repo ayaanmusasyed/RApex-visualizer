@@ -1,4 +1,4 @@
-# RA*pex
+# RAstarpex
 C++ implementations of bi- or multi- objective search algorithms like BOA\*, PPA\*, A\*pex, Rulebook Planning, and RA\*pex.
 
 
