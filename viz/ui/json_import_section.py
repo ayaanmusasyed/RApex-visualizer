@@ -3,36 +3,42 @@ import json
 import pandas as pd
 
 from examples.examples import EXAMPLES
-# ------------ JSON input ----------
-def rulebook_layers_to_edges(layers):
-    edges = []
-    for i in range(len(layers)):
-        for j in range(i + 1, len(layers)):
-            for hi in layers[i]:
-                for lo in layers[j]:
-                    edges.append((hi, lo))
-    return edges
 
-def render_json_import_section(): 
+from core.json_problem import parse_problem_json, problem_state_to_json
+# ------------ JSON input ----------
+
+def render_json_import_section():
 
     st.header("Import / Export JSON")
 
     with st.expander("Upload or paste JSON problem"):
+        
+        uploaded_json = st.file_uploader(
+            "Upload JSON",
+            type=["json"],
+            key="problem_json",
+        )
 
-        uploaded_json = st.file_uploader("Upload JSON", type=["json"],key="problem_json")
-
-        example_name = st.selectbox("Use example", [""] + list(EXAMPLES.keys()))
+        example_name = st.selectbox(
+            "Use example",
+            [""] + list(EXAMPLES.keys()),
+        )
 
         if st.button("Load selected example"):
             if example_name:
                 st.session_state.sample_json_text = EXAMPLES[example_name]
                 st.rerun()
 
-        pasted_json = st.text_area("Or paste JSON here", value=st.session_state.get("sample_json_text", ""),height=220)
+        pasted_json = st.text_area(
+            "Or paste JSON here",
+            value=st.session_state.get("sample_json_text", ""),
+            height=220,
+        )
 
         if st.button("Load JSON problem"):
             try:
                 raw = None
+
                 if uploaded_json is not None:
                     raw = uploaded_json.read().decode("utf-8")
                 elif pasted_json.strip():
@@ -40,51 +46,28 @@ def render_json_import_section():
 
                 if not raw:
                     st.warning("Provide a JSON file or paste JSON text.")
+
                 else:
-                    cfg = json.loads(raw)
+                    parsed = parse_problem_json(raw)
 
-                    loaded_rule_names = cfg["rules"]
-                    loaded_rulebook = cfg.get("rulebook", {})
-                    loaded_edges = cfg["graph"]["edges"]
-                    loaded_start = cfg["start"]
-                    loaded_goal = cfg["goal"]
-                    loaded_eps = cfg.get("eps", 0.0)
+                    loaded_rule_names = parsed["rule_names"]
+                    loaded_eps = parsed["eps"]
 
-                    if isinstance(loaded_eps, (int, float)):
-                        loaded_eps = [float(loaded_eps)] * len(loaded_rule_names)
-                    else:
-                        loaded_eps = [float(x) for x in loaded_eps]
-
-                    if "edges" in loaded_rulebook:
-                        # Explicit edges are the general partial-order format.
-                        # Rules not appearing here remain incomparable.
-                        prec_edges = [(a, b) for a, b in loaded_rulebook["edges"]]
-                    elif "layers" in loaded_rulebook:
-                        # Layers are a convenience format for fully layered hierarchies only.
-                        prec_edges = rulebook_layers_to_edges(loaded_rulebook["layers"])
-                    else:
-                        prec_edges = []
-
-                    rows = []
-                    for e in loaded_edges:
-                        row = {"u": e["u"], "v": e["v"]}
-                        c = e["c"]
-                        if len(c) != len(loaded_rule_names):
-                            raise ValueError(
-                                f"Edge {e['u']}->{e['v']} has {len(c)} costs, "
-                                f"but there are {len(loaded_rule_names)} rules."
-                            )
-                        for i, val in enumerate(c):
-                            row[f"c{i}"] = float(val)
-                        rows.append(row)
-
-                    old_k = st.session_state.get("k", len(loaded_rule_names))
+                    old_k = st.session_state.get(
+                        "k",
+                        len(loaded_rule_names),
+                    )
 
                     st.session_state.k = len(loaded_rule_names)
                     st.session_state.rule_names_csv = ",".join(loaded_rule_names)
-                    st.session_state.start_label = loaded_start
-                    st.session_state.goal_label = loaded_goal
+
+                    st.session_state.start_label = parsed["start"]
+                    st.session_state.goal_label = parsed["goal"]
+
                     st.session_state.eps_values = loaded_eps
+                    st.session_state.eq_classes = parsed["eq_classes"]
+                    st.session_state.prec_df = parsed["prec_df"]
+                    st.session_state.edges_df = parsed["edges_df"]
 
                     for i, val in enumerate(loaded_eps):
                         st.session_state[f"eps_{i}"] = float(val)
@@ -92,14 +75,48 @@ def render_json_import_section():
                     for i in range(len(loaded_rule_names), old_k):
                         st.session_state.pop(f"eps_{i}", None)
 
-                    st.session_state.prec_df = pd.DataFrame(
-                        [{"Higher Priority": a, "Lower Priority": b} for a, b in prec_edges],
-                        columns=["Higher Priority", "Lower Priority"]
-                    )
-                    st.session_state.edges_df = pd.DataFrame(rows)
-
                     st.success("Loaded problem from JSON.")
                     st.rerun()
 
             except Exception as e:
                 st.exception(e)
+                
+    with st.expander("Export current JSON"):
+        required_keys = [
+            "rule_names_csv",
+            "eq_classes",
+            "prec_df",
+            "edges_df",
+            "start_label",
+            "goal_label",
+            "eps_values",
+        ]
+
+        if all(key in st.session_state for key in required_keys):
+            rule_names = [
+                r.strip()
+                for r in st.session_state.rule_names_csv.split(",")
+                if r.strip()
+            ]
+
+            exported_json = problem_state_to_json(
+                rule_names=rule_names,
+                eq_classes=st.session_state.eq_classes,
+                prec_df=st.session_state.prec_df,
+                edges_df=st.session_state.edges_df,
+                start=st.session_state.start_label,
+                goal=st.session_state.goal_label,
+                eps=st.session_state.eps_values,
+            )
+
+            st.code(exported_json, language="json")
+
+            st.download_button(
+                "Download JSON",
+                data=exported_json,
+                file_name="rulebook_problem.json",
+                mime="application/json",
+                key="download_problem_json",
+            )
+        else:
+            st.caption("Build or load a problem before exporting JSON.")
