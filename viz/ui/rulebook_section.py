@@ -41,11 +41,16 @@ from core.rulebook_edit import (
 
 from core.rulebook_classes import find_class_index
 
+from ui.rule_management_panel import render_rule_management_panel
+
 def render_rulebook_section(rule_names):
 
     # Keep same-priority rule groups in session state.
     if "eq_classes" not in st.session_state:
         st.session_state.eq_classes = default_eq_classes(rule_names)
+
+    # Call rulebook edit panel
+    render_rule_management_panel(rule_names, st.session_state.prec_df, st.session_state.eps_values) 
 
     # If the rule list changes, reset classes for now.
     # Later we can make this smarter for rename/add/delete.
