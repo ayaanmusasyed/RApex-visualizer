@@ -97,17 +97,8 @@ def render_rule_management_panel(rule_names, prec_df, eps):
                 st.warning(str(e))
 
 
-# Keep Streamlit session state consistent whenever the rule list changes.
+# Store rule updates to apply safely before widgets render on next rerun.
 def sync_rule_session_state(rule_names, eps):
-    st.session_state.rule_names_csv = ",".join(rule_names)
-    st.session_state.eps_values = eps
-    st.session_state.k = len(rule_names)
-
-    for i, val in enumerate(eps):
-        st.session_state[f"eps_{i}"] = float(val)
-
-    # Remove old epsilon widgets after deleting rules.
-    j = len(eps)
-    while f"eps_{j}" in st.session_state:
-        st.session_state.pop(f"eps_{j}", None)
-        j += 1
+    st.session_state.pending_rule_names_csv = ",".join(rule_names)
+    st.session_state.pending_eps_values = eps
+    st.session_state.pending_k = len(rule_names)

@@ -60,6 +60,27 @@ with tab_tool:
     if "eps_values" not in st.session_state:
         st.session_state.eps_values = [0.0, 0.0]
 
+
+    # Sync w/ rulebook 
+        
+    if "pending_rule_names_csv" in st.session_state:
+        st.session_state.rule_names_csv = st.session_state.pop("pending_rule_names_csv")
+
+    if "pending_eps_values" in st.session_state:
+        eps = st.session_state.pop("pending_eps_values")
+        st.session_state.eps_values = eps
+
+        for i, val in enumerate(eps):
+            st.session_state[f"eps_{i}"] = float(val)
+
+        j = len(eps)
+        while f"eps_{j}" in st.session_state:
+            st.session_state.pop(f"eps_{j}", None)
+            j += 1
+
+    if "pending_k" in st.session_state:
+        st.session_state.k = st.session_state.pop("pending_k")
+
     controls = render_sidebar_controls(mode)
 
     k = controls["k"]
