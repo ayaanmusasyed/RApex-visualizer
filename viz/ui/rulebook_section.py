@@ -8,30 +8,18 @@ from render.cytoscape_render import (
     rulebook_class_cytoscape_elements,
     rulebook_cytoscape_stylesheet,
 )
-from render.cytoscape_rulebook import rulebook_to_cytoscape_elements
 
-from core.rulebook_cycles import (
-    find_sccs,
-    edges_inside_component,
-)
-from core.rulebook_state import (
-    normalize_prec_df,
-    add_rulebook_edge,
-    delete_rulebook_edge,
-)
-from core.rulebook_classes import (
-    default_eq_classes,
-    class_label,
-    collapse_rules_into_class,
-    remove_edges_inside_classes,
-)
+from core.rulebook_state import normalize_prec_df
+from core.rulebook_classes import default_eq_classes, class_label
 
 from ui.rule_management_panel import render_rule_management_panel
 from ui.rulebook_selection_panel import render_rulebook_selection_panel
+from ui.rulebook_cycle_panel import render_rulebook_cycle_panel
 
-# Render the full rulebook section:
-# rule management, precedence table, graph previews, Cytoscape selection,
-# equivalence classes, debug panels, and cycle handling.
+
+# Purpose:
+# Render the rulebook editor section.
+# Cytoscape is the main editor, while the table/Graphviz views are advanced previews.
 def render_rulebook_section(rule_names):
     if "prec_df" not in st.session_state:
         st.session_state.prec_df = pd.DataFrame(
@@ -53,41 +41,21 @@ def render_rulebook_section(rule_names):
     if set(rule_names) != flat_rules:
         st.session_state.eq_classes = default_eq_classes(rule_names)
 
+    st.header("Rulebook editor")
+
     render_rule_management_panel(
         rule_names,
         st.session_state.prec_df,
         st.session_state.eps_values,
     )
 
-    st.header("Rule precedence graph")
-    st.caption(
-        "State rule graph edges to explicitly define rule priority. "
-        "Rules with no edges remain incomparable."
-    )
-
-    prec_df = st.data_editor(
-        st.session_state.prec_df,
-        key="prec_editor",
-        use_container_width=True,
-        num_rows="dynamic",
-    )
-
-    # Clean table edits before using the rulebook anywhere else.
-    st.session_state.prec_df = normalize_prec_df(prec_df)
-    prec_df = st.session_state.prec_df
-
-    st.subheader("Rule graph preview")
-    st.caption("Direct edges define priority. Rules with no arrows are incomparable.")
-
-    st.graphviz_chart(
-        dot_for_rule_class_graph(
-            rule_names,
-            prec_df,
-            st.session_state.eq_classes,
-        )
-    )
+    prec_df = normalize_prec_df(st.session_state.prec_df)
+    st.session_state.prec_df = prec_df
 
     st.subheader("Interactive rulebook preview")
+    st.caption(
+        "Click a rule class to add/delete priority edges or split equivalence classes."
+    )
 
     selected = st_cytoscapejs(
         elements=rulebook_class_cytoscape_elements(
@@ -103,167 +71,41 @@ def render_rulebook_section(rule_names):
 
     render_rulebook_selection_panel(selected, prec_df)
 
+    has_cycle = render_rulebook_cycle_panel(rule_names, prec_df)
+
+    if has_cycle:
+        st.stop()
+
     with st.expander("Same-priority groups"):
         st.caption("Rules in the same bracket are treated as equivalent priority.")
 
         for i, cls in enumerate(st.session_state.eq_classes):
             st.write(f"Class {i}: `{class_label(cls)}`")
 
-    with st.expander("Debug: rulebook state actions"):
-        c1, c2 = st.columns(2)
+    with st.expander("Advanced: rule precedence table"):
+        st.caption(
+            "Manual edge list. Each row means Higher Priority > Lower Priority."
+        )
 
-        with c1:
-            add_hi = st.selectbox("Higher rule", rule_names, key="debug_add_hi")
-            add_lo = st.selectbox("Lower rule", rule_names, key="debug_add_lo")
+        edited_prec_df = st.data_editor(
+            st.session_state.prec_df,
+            key="prec_editor",
+            use_container_width=True,
+            num_rows="dynamic",
+        )
 
-            if st.button("Debug add edge", key="debug_add_rulebook_edge"):
-                try:
-                    st.session_state.prec_df = add_rulebook_edge(
-                        st.session_state.prec_df,
-                        add_hi,
-                        add_lo,
-                    )
-                    st.rerun()
-                except Exception as e:
-                    st.warning(str(e))
+        st.session_state.prec_df = normalize_prec_df(edited_prec_df)
+        prec_df = st.session_state.prec_df
 
-        with c2:
-            if len(prec_df) > 0:
-                edge_labels = [
-                    f"{row['Higher Priority']} > {row['Lower Priority']}"
-                    for _, row in prec_df.iterrows()
-                ]
+    with st.expander("Static rule graph preview"):
+        st.caption("Graphviz preview of the same rulebook state.")
 
-                selected_edge = st.selectbox(
-                    "Edge to delete",
-                    edge_labels,
-                    key="debug_delete_edge_select",
-                )
-
-                if st.button("Debug delete edge", key="debug_delete_rulebook_edge"):
-                    hi, lo = selected_edge.split(" > ")
-
-                    st.session_state.prec_df = delete_rulebook_edge(
-                        st.session_state.prec_df,
-                        hi,
-                        lo,
-                    )
-                    st.rerun()
-            else:
-                st.caption("No rulebook edges to delete.")
-
-    with st.expander("Debug: Cytoscape elements"):
-        st.json(rulebook_to_cytoscape_elements(rule_names, prec_df))
-
-    cycle_components = find_sccs(rule_names, prec_df)
-
-    if cycle_components:
-        st.error("Cycle detected in the rulebook.")
-
-        for comp in cycle_components:
-            st.markdown(
-                "**Involved rules:** " + ", ".join(f"`{r}`" for r in comp)
+        st.graphviz_chart(
+            dot_for_rule_class_graph(
+                rule_names,
+                prec_df,
+                st.session_state.eq_classes,
             )
-
-            internal_edges = edges_inside_component(prec_df, comp)
-
-            if len(comp) == 2:
-                r1, r2 = comp
-
-                st.warning(
-                    f"Rules `{r1}` and `{r2}` currently claim priority over each other."
-                )
-
-                st.markdown(
-                    """
-Choose one:
-
-**A)** Treat the two rules as having equal priority.
-
-**B)** Remove one of the conflicting preferences.
-"""
-                )
-
-                c1, c2, c3 = st.columns(3)
-
-                if c1.button(
-                    f"Treat {r1} and {r2} as equal priority",
-                    key=f"eq_{r1}_{r2}",
-                ):
-                    # Collapse the cycle into a real same-priority class.
-                    st.session_state.eq_classes = collapse_rules_into_class(
-                        st.session_state.eq_classes,
-                        comp,
-                    )
-
-                    # Remove priority edges inside that same-priority class.
-                    st.session_state.prec_df = remove_edges_inside_classes(
-                        prec_df,
-                        st.session_state.eq_classes,
-                    )
-
-                    st.rerun()
-
-                edge_lookup = {(a, b): idx for idx, a, b in internal_edges}
-
-                if (r1, r2) in edge_lookup:
-                    if c2.button(
-                        f"Remove {r1} > {r2}",
-                        key=f"remove_{r1}_{r2}",
-                    ):
-                        st.session_state.prec_df = prec_df.drop(
-                            edge_lookup[(r1, r2)]
-                        ).reset_index(drop=True)
-                        st.rerun()
-
-                if (r2, r1) in edge_lookup:
-                    if c3.button(
-                        f"Remove {r2} > {r1}",
-                        key=f"remove_{r2}_{r1}",
-                    ):
-                        st.session_state.prec_df = prec_df.drop(
-                            edge_lookup[(r2, r1)]
-                        ).reset_index(drop=True)
-                        st.rerun()
-
-            else:
-                st.warning(
-                    "For 3 or more rules, this cycle is ambiguous. You can either collapse "
-                    "the involved rules into one equal-priority group, or manually remove "
-                    "edges to make the rulebook acyclic."
-                )
-
-                c_a, c_b = st.columns(2)
-
-                if c_a.button(
-                    "Treat involved rules as same priority",
-                    key=f"collapse_{'_'.join(comp)}",
-                ):
-                    # Collapse all rules in this cycle into one same-priority class.
-                    st.session_state.eq_classes = collapse_rules_into_class(
-                        st.session_state.eq_classes,
-                        comp,
-                    )
-
-                    # Remove priority edges inside that same-priority class.
-                    st.session_state.prec_df = remove_edges_inside_classes(
-                        prec_df,
-                        st.session_state.eq_classes,
-                    )
-
-                    st.rerun()
-
-                if c_b.button(
-                    "Show edges to edit manually",
-                    key=f"show_edges_{'_'.join(comp)}",
-                ):
-                    st.session_state[f"show_cycle_edges_{'_'.join(comp)}"] = True
-
-                if st.session_state.get(f"show_cycle_edges_{'_'.join(comp)}", False):
-                    st.markdown("Edges involved in the cycle:")
-                    for _, a, b in internal_edges:
-                        st.markdown(f"- `{a} > {b}`")
-
-        st.stop()
+        )
 
     return prec_df
