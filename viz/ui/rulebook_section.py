@@ -49,9 +49,6 @@ def render_rulebook_section(rule_names):
     if "eq_classes" not in st.session_state:
         st.session_state.eq_classes = default_eq_classes(rule_names)
 
-    # Call rulebook edit panel
-    render_rule_management_panel(rule_names, st.session_state.prec_df, st.session_state.eps_values) 
-
     # If the rule list changes, reset classes for now.
     # Later we can make this smarter for rename/add/delete.
     flat_rules = {
@@ -62,6 +59,9 @@ def render_rulebook_section(rule_names):
 
     if set(rule_names) != flat_rules:
         st.session_state.eq_classes = default_eq_classes(rule_names)
+
+    # Call rulebook edit panel
+    render_rule_management_panel(rule_names, st.session_state.prec_df, st.session_state.eps_values) 
 
     st.header("Rule precedence graph")
     st.caption("State rule graph edges to explicitly define rule priority. Rules with no edges remain incomparable.")
