@@ -46,6 +46,14 @@ from ui.rule_management_panel import render_rule_management_panel
 def render_rulebook_section(rule_names):
 
     # Keep same-priority rule groups in session state.
+    if "prec_df" not in st.session_state:
+        st.session_state.prec_df = pd.DataFrame(
+            columns=["Higher Priority", "Lower Priority"]
+        )
+
+    if "eps_values" not in st.session_state:
+        st.session_state.eps_values = [0.0] * len(rule_names)
+
     if "eq_classes" not in st.session_state:
         st.session_state.eq_classes = default_eq_classes(rule_names)
 
