@@ -3,6 +3,8 @@ import pandas as pd
 
 from core.solution_utils import compute_rulebook_nondominated_paths
 
+from core.problem_graph_state import sync_edge_cost_columns
+
 def render_problem_graph_section(k, rule_names, start_label, goal_label, prec_df, eps):
 
     st.header("Problem graph edges")
@@ -11,16 +13,15 @@ def render_problem_graph_section(k, rule_names, start_label, goal_label, prec_df
 
     if "edges_df" not in st.session_state:
         seed = pd.DataFrame([
-            {"u": "S", "v": "A", **{f"c{i}": 0.0 for i in range(k)}},
-            {"u": "A", "v": "T", **{f"c{i}": 0.0 for i in range(k)}},
+            {"u": "S", "v": "A"},
+            {"u": "A", "v": "T"},
         ])
-        st.session_state.edges_df = seed[need_cols]
+        st.session_state.edges_df = sync_edge_cost_columns(seed, k)
     else:
-        df_old = st.session_state.edges_df.copy()
-        for c in need_cols:
-            if c not in df_old.columns:
-                df_old[c] = 0.0 if c.startswith("c") else ""
-        st.session_state.edges_df = df_old[need_cols]
+        st.session_state.edges_df = sync_edge_cost_columns(
+            st.session_state.edges_df,
+            k,
+        )
 
     edges_df = st.data_editor(
         st.session_state.edges_df,

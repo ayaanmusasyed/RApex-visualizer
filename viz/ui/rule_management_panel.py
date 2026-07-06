@@ -6,6 +6,8 @@ from core.rule_management import (
     delete_rule,
 )
 
+from core.problem_graph_state import sync_edge_cost_columns
+
 # Render controls for adding, renaming, and deleting rules.
 def render_rule_management_panel(rule_names, prec_df, eps):
     with st.expander("Manage rules"):
@@ -27,6 +29,12 @@ def render_rule_management_panel(rule_names, prec_df, eps):
 
                 st.session_state.eq_classes = eq_classes
                 sync_rule_session_state(rule_names, eps)
+
+                if "edges_df" in st.session_state:
+                    st.session_state.edges_df = sync_edge_cost_columns(
+                        st.session_state.edges_df,
+                        len(rule_names),
+                    )
 
                 st.rerun()
             except Exception as e:
@@ -91,6 +99,12 @@ def render_rule_management_panel(rule_names, prec_df, eps):
 
                 sync_rule_session_state(rule_names, eps)
 
+                if "edges_df" in st.session_state:
+                    st.session_state.edges_df = sync_edge_cost_columns(
+                        st.session_state.edges_df,
+                        len(rule_names),
+                    )
+                    
                 st.rerun()
 
             except Exception as e:
