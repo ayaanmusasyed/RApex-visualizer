@@ -1,7 +1,10 @@
 EXAMPLES = {
     "2 nodes: rulebook changes winner": """{
   "rules": ["dist", "energy"],
-  "rulebook": { "edges": [["dist", "energy"]] },
+  "rulebook": {
+    "classes": [["dist"], ["energy"]],
+    "edges": [["dist", "energy"]]
+  },
   "graph": {
     "edges": [
       {"u":"S","v":"A","c":[5,100]},
@@ -17,7 +20,13 @@ EXAMPLES = {
 
     "3 nodes: incomparable rule": """{
   "rules": ["r1", "r2", "r3", "r4"],
-  "rulebook": { "edges": [["r1", "r2"], ["r1", "r3"]] },
+  "rulebook": {
+
+    "classes": [["r1"], ["r2"], ["r3"], ["r4"]],
+
+    "edges": [["r1", "r2"], ["r1", "r3"]]
+
+  },
   "graph": {
     "edges": [
       {"u":"S","v":"A","c":[5,10,10,100]},

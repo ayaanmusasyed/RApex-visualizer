@@ -56,6 +56,10 @@ def render_rulebook_section(rule_names):
     st.caption(
         "Click a rule class to add/delete priority edges or split equivalence classes."
     )
+    st.caption(
+    "Click a rule class to select it. Use the selected-class panel to add/remove "
+    "priority edges or split equivalence classes."
+    )
 
     selected = st_cytoscapejs(
         elements=rulebook_class_cytoscape_elements(
