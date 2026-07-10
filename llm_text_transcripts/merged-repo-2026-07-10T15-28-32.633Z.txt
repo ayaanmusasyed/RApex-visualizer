@@ -1,0 +1,3258 @@
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/BACKEND/__INIT__.PY CODE IS BELOW
+
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/BACKEND/ALGORITHM_CONFIG.PY CODE IS BELOW
+ALGORITHMS = {
+    "RApex": {"trace": "full", "min_k": 1, "max_k": None},
+    "Apex": {"trace": "final", "min_k": 1, "max_k": None},
+    "PPA": {"trace": "final", "min_k": 2, "max_k": 2},
+    "BOA": {"trace": "final", "min_k": 2, "max_k": 2},
+    "NAMOA": {"trace": "final", "min_k": 2, "max_k": 2},
+}
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/BACKEND/BACKEND_RUNNER.PY CODE IS BELOW
+# viz/backend_runner.py
+
+import subprocess
+import tempfile
+from pathlib import Path
+
+from core.io_utils import build_node_ids, write_queries_txt, write_rules_txt, write_gr_files
+from core.trace_utils import init_from_trace, parse_trace_lines
+from core.solution_utils import (
+    compute_solution_edges,
+    compute_solution_paths,
+    compute_candidate_paths,
+    paths_to_edges,
+    collect_final_solution_paths_from_trace,
+)
+
+# Helper function to verify file paths and binary
+def ensure_binary(repo_root: Path):
+    bin_path = repo_root / "build" / "multiobj"
+    build_dir = repo_root / "build"
+
+    # if bin_path.exists():
+    #     return bin_path
+
+    build_dir.mkdir(exist_ok=True)
+
+    configure = subprocess.run(
+        ["cmake", "-S", str(repo_root), "-B", str(build_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    if configure.returncode != 0:
+        raise RuntimeError(
+            "CMake configure failed.\n\n"
+            f"STDOUT:\n{configure.stdout}\n\n"
+            f"STDERR:\n{configure.stderr}"
+        )
+
+    build = subprocess.run(
+        ["cmake", "--build", str(build_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    if build.returncode != 0:
+        raise RuntimeError(
+            "CMake build failed.\n\n"
+            f"STDOUT:\n{build.stdout}\n\n"
+            f"STDERR:\n{build.stderr}"
+        )
+
+    if not bin_path.exists():
+        raise FileNotFoundError("Build finished but build/multiobj was not created.")
+
+    return bin_path
+
+def run_algorithm(
+    algorithm_name,
+    edges_df,
+    rule_names,
+    eps,
+    prec_df,
+    start_label,
+    goal_label,
+    cutoff,
+    merge,
+    eq_classes=None,
+):
+    if len(rule_names) != len(eps):
+        raise ValueError("Rule names count must match epsilon length.")
+
+    k = len(rule_names)
+
+    name_to_id = build_node_ids(edges_df, start_label, goal_label)
+    s_id = name_to_id[str(start_label).strip()]
+    t_id = name_to_id[str(goal_label).strip()]
+
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_path = ensure_binary(repo_root)
+
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+
+        trace_path = td / f"trace_{algorithm_name}.jsonl"
+        stats_path = td / f"stats_{algorithm_name}.txt"
+        rules_path = td / "rules.txt"
+        queries_path = td / "queries.txt"
+
+        write_queries_txt(queries_path, s_id, t_id)
+        write_rules_txt(rules_path, rule_names, eps, prec_df, eq_classes)
+        gr_paths = write_gr_files(td, edges_df, name_to_id, k)
+
+        cmd = [
+            str(bin_path),
+            "--algorithm", algorithm_name,
+            "--merge", merge,
+            "--cutoffTime", str(cutoff),
+            "--trace", str(trace_path),
+            "--output", str(stats_path),
+            "--query", str(queries_path),
+            "--rules", str(rules_path),
+            "--map",
+            *[str(p) for p in gr_paths],
+        ]
+
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=td)
+
+        if res.returncode != 0:
+            raise RuntimeError(
+                "multiobj failed.\n"
+                f"STDOUT:\n{res.stdout or '(no stdout)'}\n\n"
+                f"STDERR:\n{res.stderr or '(no stderr)'}"
+            )
+
+        trace = []
+        trace_stepper = None
+        solution_edges = set()
+        solution_paths = []
+        candidate_edges = set()
+        candidate_paths = []
+
+        if trace_path.exists():
+            raw_lines = trace_path.read_text(encoding="utf-8").splitlines()
+            fixed = parse_trace_lines(raw_lines)
+
+            trace = fixed
+            trace_stepper = init_from_trace(fixed)
+
+            id_to_name = {v: k for k, v in name_to_id.items()}
+
+            solution_paths = collect_final_solution_paths_from_trace(fixed, id_to_name)
+
+            if solution_paths:
+                solution_edges = paths_to_edges(solution_paths)
+            else:
+                solution_edges = compute_solution_edges(
+                    fixed, edges_df, name_to_id, start_label, goal_label, k
+                )
+                solution_paths = compute_solution_paths(
+                    fixed, edges_df, name_to_id, start_label, goal_label, k
+                )
+
+            if len(edges_df) <= 20:
+                candidate_paths = compute_candidate_paths(
+                    fixed, edges_df, name_to_id, start_label, goal_label, k, eps
+                )
+            else:
+                candidate_paths = []
+
+            candidate_edges = paths_to_edges(candidate_paths)
+
+        return {
+            "algorithm": algorithm_name,
+            "trace": trace,
+            "trace_stepper": trace_stepper,
+            "has_trace": trace_path.exists(),
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "stats_text": stats_path.read_text(encoding="utf-8") if stats_path.exists() else "",
+            "name_to_id": name_to_id,
+            "solution_edges": solution_edges,
+            "solution_paths": solution_paths,
+            "candidate_edges": candidate_edges,
+            "candidate_paths": candidate_paths,
+        }
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/__INIT__.PY CODE IS BELOW
+
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/ALGORITHM_RULES.PY CODE IS BELOW
+from backend.algorithm_config import ALGORITHMS
+
+def allowed_algorithms(k):
+    out = []
+    for name, cfg in ALGORITHMS.items():
+        max_k = cfg["max_k"]
+        min_k = cfg["min_k"]
+        if k >= min_k and (max_k is None or k <= max_k):
+            out.append(name)
+    return out
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/FORMATTING.PY CODE IS BELOW
+INF_THRESHOLD = 1e9
+SCALE = 1.0
+
+
+def unscale_vec(vec):
+    return [float(x) / SCALE for x in vec]
+
+def pretty_num(x):
+
+    x = float(x)
+
+    if x >= INF_THRESHOLD:
+        return "∞"
+
+    return f"{x / SCALE:.4g}"
+
+def pretty_vec(vec):
+
+    vals = []
+
+    for x in vec:
+        vals.append(pretty_num(x))
+
+    return "[" + ", ".join(vals) + "]"
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/IO_UTILS.PY CODE IS BELOW
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List
+
+SCALE = 1.0
+
+
+def _normalize_rule_name_or_index(x: str, rule_names: List[str]) -> int:
+    x = str(x).strip()
+
+    if x == "":
+        raise ValueError("Empty rule reference.")
+
+    if x.isdigit():
+        i = int(x)
+        if not (0 <= i < len(rule_names)):
+            raise ValueError(f"Rule index {i} out of range.")
+        return i
+
+    if x in rule_names:
+        return rule_names.index(x)
+
+    raise ValueError(f"Unknown rule '{x}'.")
+
+
+def build_node_ids(edges_df: pd.DataFrame, start_label: str, goal_label: str):
+
+    labels = set()
+
+    labels.add(str(start_label).strip())
+    labels.add(str(goal_label).strip())
+
+    for _, r in edges_df.iterrows():
+
+        u = str(r["u"]).strip()
+        v = str(r["v"]).strip()
+
+        if u:
+            labels.add(u)
+        if v:
+            labels.add(v)
+
+    labels = sorted(labels)
+
+    return {name: i + 1 for i, name in enumerate(labels)}
+
+
+def write_queries_txt(path: Path, s_id: int, t_id: int):
+    path.write_text(f"{s_id},{t_id}\n", encoding="utf-8")
+
+
+def write_rules_txt(path: Path, rule_names: List[str], eps: List[float], precedence_edges_df: pd.DataFrame, eq_classes=None):
+
+    k = len(rule_names)
+
+    if len(eps) != k:
+        raise ValueError("eps length must match rules")
+
+   # Convert rule-name equivalence classes into rule-index equivalence classes.
+    if eq_classes is None:
+        eq_classes_idx = [[i] for i in range(k)]
+    else:
+        eq_classes_idx = []
+        for cls in eq_classes:
+            idx_cls = [
+                _normalize_rule_name_or_index(rule, rule_names)
+                for rule in cls
+            ]
+            eq_classes_idx.append(idx_cls)
+
+    rels = []
+
+    if precedence_edges_df is not None and len(precedence_edges_df) > 0:
+
+        for _, r in precedence_edges_df.iterrows():
+
+            hi = str(r.get("Higher Priority", "")).strip()
+            lo = str(r.get("Lower Priority", "")).strip()
+
+            if not hi or not lo:
+                continue
+
+            a = _normalize_rule_name_or_index(hi, rule_names)
+            b = _normalize_rule_name_or_index(lo, rule_names)
+
+            if a == b:
+                raise ValueError("Self-edge in precedence graph.")
+
+            rels.append((a, b))
+
+    lines = []
+
+    lines.append(str(k))
+    lines.append(" ".join(str(float(x)) for x in eps))
+
+    lines.append(str(len(eq_classes_idx)))
+
+    for cls in eq_classes_idx:
+        lines.append(str(len(cls)) + " " + " ".join(str(i) for i in cls))
+
+    lines.append(str(len(rels)))
+
+    for a, b in rels:
+        lines.append(f"{a} {b}")
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_gr_files(out_dir: Path, edges_df: pd.DataFrame, name_to_id: Dict[str, int], k: int):
+
+    arcs = []
+
+    for _, r in edges_df.iterrows():
+
+        u = str(r["u"]).strip()
+        v = str(r["v"]).strip()
+
+        if not u or not v:
+            continue
+
+        cu = name_to_id[u]
+        cv = name_to_id[v]
+
+        cost = [float(r[f"c{i}"]) for i in range(k)]
+
+        arcs.append((cu, cv, cost))
+
+    n_nodes = max(name_to_id.values())
+    n_edges = len(arcs)
+
+    gr_paths = []
+
+    for i in range(k):
+
+        p = out_dir / f"w{i}.gr"
+
+        gr_paths.append(p)
+
+        lines = [
+            f"c objective {i}",
+            f"p sp {n_nodes} {n_edges}",
+        ]
+
+        for cu, cv, cost in arcs:
+            w = cost[i]
+            lines.append(f"a {cu} {cv} {int(round(w * SCALE))}")
+
+        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    return gr_paths
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/JSON_PROBLEM.PY CODE IS BELOW
+import json
+import pandas as pd
+
+
+# Convert layered rulebook format into explicit priority edges.
+def rulebook_layers_to_edges(layers):
+    edges = []
+
+    for i in range(len(layers)):
+        for j in range(i + 1, len(layers)):
+            for hi in layers[i]:
+                for lo in layers[j]:
+                    edges.append((hi, lo))
+
+    return edges
+
+
+# Parse JSON text into the app's internal state objects.
+def parse_problem_json(raw_json):
+    cfg = json.loads(raw_json)
+
+    rule_names = cfg["rules"]
+    rulebook = cfg.get("rulebook", {})
+    graph_edges = cfg["graph"]["edges"]
+    start = cfg["start"]
+    goal = cfg["goal"]
+    eps = cfg.get("eps", 0.0)
+
+    if isinstance(eps, (int, float)):
+        eps = [float(eps)] * len(rule_names)
+    else:
+        eps = [float(x) for x in eps]
+
+    if "classes" in rulebook:
+        eq_classes = rulebook["classes"]
+    else:
+        eq_classes = [[r] for r in rule_names]
+
+    if "edges" in rulebook:
+        prec_edges = [(a, b) for a, b in rulebook["edges"]]
+    elif "layers" in rulebook:
+        prec_edges = rulebook_layers_to_edges(rulebook["layers"])
+    else:
+        prec_edges = []
+
+    prec_df = pd.DataFrame(
+        [{"Higher Priority": a, "Lower Priority": b} for a, b in prec_edges],
+        columns=["Higher Priority", "Lower Priority"],
+    )
+
+    rows = []
+
+    for edge in graph_edges:
+        row = {"u": edge["u"], "v": edge["v"]}
+        costs = edge["c"]
+
+        if len(costs) != len(rule_names):
+            raise ValueError(
+                f"Edge {edge['u']}->{edge['v']} has {len(costs)} costs, "
+                f"but there are {len(rule_names)} rules."
+            )
+
+        for i, val in enumerate(costs):
+            row[f"c{i}"] = float(val)
+
+        rows.append(row)
+
+    edges_df = pd.DataFrame(rows)
+
+    return {
+        "rule_names": rule_names,
+        "eq_classes": eq_classes,
+        "prec_df": prec_df,
+        "edges_df": edges_df,
+        "start": start,
+        "goal": goal,
+        "eps": eps,
+    }
+
+
+# Convert the current app state back into shareable JSON.
+def problem_state_to_json(rule_names, eq_classes, prec_df, edges_df, start, goal, eps):
+    rulebook_edges = []
+
+    if prec_df is not None:
+        for _, row in prec_df.iterrows():
+            hi = str(row.get("Higher Priority", "")).strip()
+            lo = str(row.get("Lower Priority", "")).strip()
+
+            if hi and lo:
+                rulebook_edges.append([hi, lo])
+
+    graph_edges = []
+
+    for _, row in edges_df.iterrows():
+        u = str(row.get("u", "")).strip()
+        v = str(row.get("v", "")).strip()
+
+        if not u or not v:
+            continue
+
+        costs = []
+
+        for i in range(len(rule_names)):
+            costs.append(float(row.get(f"c{i}", 0.0)))
+
+        graph_edges.append({
+            "u": u,
+            "v": v,
+            "c": costs,
+        })
+
+    out = {
+        "rules": rule_names,
+        "rulebook": {
+            "classes": eq_classes,
+            "edges": rulebook_edges,
+        },
+        "graph": {
+            "edges": graph_edges,
+        },
+        "start": start,
+        "goal": goal,
+        "eps": eps,
+    }
+
+    return json.dumps(out, indent=2)
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/LABELS.PY CODE IS BELOW
+import streamlit as st
+
+# function to get the name of a node from its id 
+def id_to_label(state_id: int) -> str:
+    name_to_id = st.session_state.get("name_to_id", {})
+    rev = {v: k for k, v in name_to_id.items()}
+    return rev.get(state_id, str(state_id))
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/PROBLEM_GRAPH_STATE.PY CODE IS BELOW
+import pandas as pd
+
+# makes sure the problem graph edge table has exactly one cost column per rule.
+def sync_edge_cost_columns(edges_df, k):
+    needed_cols = ["u", "v"] + [f"c{i}" for i in range(k)]
+
+    if edges_df is None or len(edges_df) == 0:
+        return pd.DataFrame(columns=needed_cols)
+
+    df = edges_df.copy()
+
+    for col in needed_cols:
+        if col not in df.columns:
+            df[col] = 0.0 if col.startswith("c") else ""
+
+    return df[needed_cols]
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/RULE_MANAGEMENT.PY CODE IS BELOW
+import pandas as pd
+
+from core.rulebook_state import normalize_prec_df
+
+# Add a new rule/objective and create a singleton equivalence class for it.
+def add_rule(rule_names, eq_classes, eps, new_rule_name):
+    new_rule_name = str(new_rule_name).strip()
+
+    if not new_rule_name:
+        raise ValueError("Rule name cannot be empty.")
+
+    if new_rule_name in rule_names:
+        raise ValueError(f"Rule '{new_rule_name}' already exists.")
+
+    new_rule_names = rule_names + [new_rule_name]
+    new_eq_classes = eq_classes + [[new_rule_name]]
+    new_eps = eps + [0.0]
+
+    return new_rule_names, new_eq_classes, new_eps
+
+
+# Rename a rule everywhere it appears: rule list, equivalence classes, and precedence table.
+def rename_rule(rule_names, eq_classes, prec_df, old_name, new_name):
+    old_name = str(old_name).strip()
+    new_name = str(new_name).strip()
+
+    if old_name not in rule_names:
+        raise ValueError(f"Unknown rule '{old_name}'.")
+
+    if not new_name:
+        raise ValueError("New rule name cannot be empty.")
+
+    if new_name in rule_names and new_name != old_name:
+        raise ValueError(f"Rule '{new_name}' already exists.")
+
+    new_rule_names = [
+        new_name if rule == old_name else rule
+        for rule in rule_names
+    ]
+
+    new_eq_classes = []
+
+    for cls in eq_classes:
+        new_eq_classes.append([
+            new_name if rule == old_name else rule
+            for rule in cls
+        ])
+
+    df = normalize_prec_df(prec_df)
+
+    df["Higher Priority"] = df["Higher Priority"].replace(old_name, new_name)
+    df["Lower Priority"] = df["Lower Priority"].replace(old_name, new_name)
+
+    return new_rule_names, new_eq_classes, normalize_prec_df(df)
+
+
+# Delete a rule and remove all precedence edges touching that rule.
+def delete_rule(rule_names, eq_classes, prec_df, eps, rule_to_delete):
+    rule_to_delete = str(rule_to_delete).strip()
+
+    if rule_to_delete not in rule_names:
+        raise ValueError(f"Unknown rule '{rule_to_delete}'.")
+
+    delete_idx = rule_names.index(rule_to_delete)
+
+    new_rule_names = [
+        rule for rule in rule_names
+        if rule != rule_to_delete
+    ]
+
+    new_eps = [
+        val for i, val in enumerate(eps)
+        if i != delete_idx
+    ]
+
+    new_eq_classes = []
+
+    for cls in eq_classes:
+        new_cls = [
+            rule for rule in cls
+            if rule != rule_to_delete
+        ]
+
+        if new_cls:
+            new_eq_classes.append(new_cls)
+
+    df = normalize_prec_df(prec_df)
+
+    df = df[
+        (df["Higher Priority"] != rule_to_delete)
+        & (df["Lower Priority"] != rule_to_delete)
+    ]
+
+    return new_rule_names, new_eq_classes, normalize_prec_df(df), new_eps
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/RULEBOOK_CLASSES.PY CODE IS BELOW
+# This file handles equivalence classes like [r1, r2].
+
+# Create default equivalence classes where every rule starts alone.
+def default_eq_classes(rule_names):
+    return [[str(r).strip()] for r in rule_names if str(r).strip()]
+
+
+# Convert an equivalence class like ["r1", "r2"] into display text "[r1, r2]".
+def class_label(cls):
+    return "[" + ", ".join(cls) + "]"
+
+
+# Find which equivalence class contains a given rule.
+def find_class_index(eq_classes, rule):
+    for i, cls in enumerate(eq_classes):
+        if rule in cls:
+            return i
+    return None
+
+# Collapse a detected cycle into one same-priority equivalence class.
+def collapse_rules_into_class(eq_classes, rules_to_collapse):
+    rules_to_collapse = set(rules_to_collapse)
+
+    merged = []
+    remaining = []
+
+    for cls in eq_classes:
+        if any(rule in rules_to_collapse for rule in cls):
+            merged.extend(cls)
+        else:
+            remaining.append(cls)
+
+    merged = sorted(set(merged))
+
+    return remaining + [merged]
+
+
+import pandas as pd
+
+# Remove priority edges inside a new equivalence class.
+def remove_edges_inside_classes(prec_df, eq_classes):
+    rows = []
+
+    for _, row in prec_df.iterrows():
+        hi = str(row.get("Higher Priority", "")).strip()
+        lo = str(row.get("Lower Priority", "")).strip()
+
+        hi_class = find_class_index(eq_classes, hi)
+        lo_class = find_class_index(eq_classes, lo)
+
+        if hi_class is not None and hi_class == lo_class:
+            continue
+
+        rows.append({
+            "Higher Priority": hi,
+            "Lower Priority": lo,
+        })
+
+    return pd.DataFrame(rows, columns=["Higher Priority", "Lower Priority"])
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/RULEBOOK_CYCLES.PY CODE IS BELOW
+import pandas as pd 
+
+# ---- Functions for cycle detection w/ SCCs ----
+# Used Kosaraju's Alg 
+def find_sccs(rule_names, prec_df):
+    name_set = set(rule_names)
+    G = {r: [] for r in rule_names}
+    GR = {r: [] for r in rule_names}
+
+    for _, row in prec_df.iterrows():
+        a = str(row.get("Higher Priority", "")).strip()
+        b = str(row.get("Lower Priority", "")).strip()
+        if a in name_set and b in name_set:
+            G[a].append(b)
+            GR[b].append(a)
+
+    seen = set()
+    order = []
+
+    def dfs(u):
+        seen.add(u)
+        for v in G[u]:
+            if v not in seen:
+                dfs(v)
+        order.append(u)
+
+    for r in rule_names:
+        if r not in seen:
+            dfs(r)
+
+    seen.clear()
+    comps = []
+
+    def rdfs(u, comp):
+        seen.add(u)
+        comp.append(u)
+        for v in GR[u]:
+            if v not in seen:
+                rdfs(v, comp)
+
+    for r in reversed(order):
+        if r not in seen:
+            comp = []
+            rdfs(r, comp)
+            comps.append(comp)
+
+    return [c for c in comps if len(c) > 1]
+
+
+def edges_inside_component(prec_df, comp):
+    comp = set(comp)
+    out = []
+    for idx, row in prec_df.iterrows():
+        a = str(row.get("Higher Priority", "")).strip()
+        b = str(row.get("Lower Priority", "")).strip()
+        if a in comp and b in comp:
+            out.append((idx, a, b))
+    return out
+
+
+def remove_internal_cycle_edges(prec_df, comp):
+    comp = set(comp)
+    keep_rows = []
+    for _, row in prec_df.iterrows():
+        a = str(row.get("Higher Priority", "")).strip()
+        b = str(row.get("Lower Priority", "")).strip()
+        if not (a in comp and b in comp):
+            keep_rows.append(row)
+    return pd.DataFrame(keep_rows, columns=prec_df.columns)
+
+
+def collapse_cycle_to_equivalence_class(prec_df, comp):
+    """
+    UI-side approximation:
+    remove all priority edges inside the cycle.
+    The rules remain separate columns, but no longer claim priority over each other.
+    This represents 'same priority' at the UI level.
+    """
+    return remove_internal_cycle_edges(prec_df, comp)
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/RULEBOOK_EDIT.PY CODE IS BELOW
+# This file has functions to support editing of the interactive rulebook 
+
+import pandas as pd
+
+from core.rulebook_classes import find_class_index
+from core.rulebook_state import normalize_prec_df
+
+# Split one equivalence class back into singleton classes.
+def split_equivalence_class(eq_classes, class_idx):
+    if class_idx < 0 or class_idx >= len(eq_classes):
+        raise ValueError("Invalid class index.")
+
+    target = eq_classes[class_idx]
+
+    if len(target) <= 1:
+        raise ValueError("This class already contains only one rule.")
+
+    new_classes = []
+
+    for i, cls in enumerate(eq_classes):
+        if i == class_idx:
+            for rule in cls:
+                new_classes.append([rule])
+        else:
+            new_classes.append(cls)
+
+    return new_classes
+
+
+# Add a priority edge from one equivalence class to another.
+def add_class_edge(prec_df, eq_classes, from_class_idx, to_class_idx):
+    if from_class_idx == to_class_idx:
+        raise ValueError("Cannot add a priority edge inside the same class.")
+
+    if from_class_idx < 0 or from_class_idx >= len(eq_classes):
+        raise ValueError("Invalid source class.")
+
+    if to_class_idx < 0 or to_class_idx >= len(eq_classes):
+        raise ValueError("Invalid target class.")
+
+    source_rep = eq_classes[from_class_idx][0]
+    target_rep = eq_classes[to_class_idx][0]
+
+    df = normalize_prec_df(prec_df)
+
+    new_row = pd.DataFrame([
+        {
+            "Higher Priority": source_rep,
+            "Lower Priority": target_rep,
+        }
+    ])
+
+    df = pd.concat([df, new_row], ignore_index=True)
+
+    return normalize_prec_df(df)
+
+
+# Remove any priority edge from one equivalence class to another.
+def delete_class_edge(prec_df, eq_classes, from_class_idx, to_class_idx):
+    if from_class_idx < 0 or from_class_idx >= len(eq_classes):
+        raise ValueError("Invalid source class.")
+
+    if to_class_idx < 0 or to_class_idx >= len(eq_classes):
+        raise ValueError("Invalid target class.")
+
+    df = normalize_prec_df(prec_df)
+
+    rows = []
+
+    for _, row in df.iterrows():
+        hi = str(row["Higher Priority"]).strip()
+        lo = str(row["Lower Priority"]).strip()
+
+        hi_idx = find_class_index(eq_classes, hi)
+        lo_idx = find_class_index(eq_classes, lo)
+
+        if hi_idx == from_class_idx and lo_idx == to_class_idx:
+            continue
+
+        rows.append({
+            "Higher Priority": hi,
+            "Lower Priority": lo,
+        })
+
+    return pd.DataFrame(rows, columns=["Higher Priority", "Lower Priority"])
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/RULEBOOK_STATE.PY CODE IS BELOW
+import pandas as pd
+
+
+PREC_COLS = ["Higher Priority", "Lower Priority"]
+
+# Clean the precedence table after user edits.
+# Removes empty rows, self-edges, duplicate edges, and missing columns.
+def normalize_prec_df(prec_df):
+    if prec_df is None:
+        return pd.DataFrame(columns=PREC_COLS)
+
+    df = prec_df.copy()
+
+    for col in PREC_COLS:
+        if col not in df.columns:
+            df[col] = ""
+
+    df = df[PREC_COLS]
+
+    rows = []
+    seen = set()
+
+    for _, row in df.iterrows():
+        hi = str(row["Higher Priority"]).strip()
+        lo = str(row["Lower Priority"]).strip()
+
+        if not hi or not lo:
+            continue
+
+        if hi == lo:
+            continue
+
+        edge = (hi, lo)
+
+        if edge in seen:
+            continue
+
+        seen.add(edge)
+        rows.append({
+            "Higher Priority": hi,
+            "Lower Priority": lo,
+        })
+
+    return pd.DataFrame(rows, columns=PREC_COLS)
+
+
+# Add a new rule/objective name.
+def add_rule(rule_names, name):
+    name = str(name).strip()
+
+    if not name:
+        raise ValueError("Rule name cannot be empty.")
+
+    if name in rule_names:
+        raise ValueError(f"Rule '{name}' already exists.")
+
+    return rule_names + [name]
+
+
+# Rename a rule and update all rulebook edges that mention it.
+def rename_rule(rule_names, prec_df, old, new):
+    old = str(old).strip()
+    new = str(new).strip()
+
+    if old not in rule_names:
+        raise ValueError(f"Unknown rule '{old}'.")
+
+    if not new:
+        raise ValueError("New rule name cannot be empty.")
+
+    if new in rule_names and new != old:
+        raise ValueError(f"Rule '{new}' already exists.")
+
+    new_rule_names = [
+        new if rule == old else rule
+        for rule in rule_names
+    ]
+
+    df = normalize_prec_df(prec_df)
+
+    df["Higher Priority"] = df["Higher Priority"].replace(old, new)
+    df["Lower Priority"] = df["Lower Priority"].replace(old, new)
+
+    return new_rule_names, normalize_prec_df(df)
+
+
+# Delete a rule and remove all rulebook edges touching it.
+def delete_rule(rule_names, prec_df, name):
+    name = str(name).strip()
+
+    if name not in rule_names:
+        raise ValueError(f"Unknown rule '{name}'.")
+
+    new_rule_names = [
+        rule for rule in rule_names
+        if rule != name
+    ]
+
+    df = normalize_prec_df(prec_df)
+
+    df = df[
+        (df["Higher Priority"] != name)
+        & (df["Lower Priority"] != name)
+    ]
+
+    return new_rule_names, normalize_prec_df(df)
+
+
+# Add one directed priority edge: hi > lo.
+def add_rulebook_edge(prec_df, hi, lo):
+    hi = str(hi).strip()
+    lo = str(lo).strip()
+
+    if not hi or not lo:
+        raise ValueError("Both rules are required.")
+
+    if hi == lo:
+        raise ValueError("Cannot add a self-edge.")
+
+    df = normalize_prec_df(prec_df)
+
+    new_row = pd.DataFrame([
+        {"Higher Priority": hi, "Lower Priority": lo}
+    ])
+
+    df = pd.concat([df, new_row], ignore_index=True)
+
+    return normalize_prec_df(df)
+
+
+
+# Remove one directed priority edge: hi > lo.
+def delete_rulebook_edge(prec_df, hi, lo):
+    hi = str(hi).strip()
+    lo = str(lo).strip()
+
+    df = normalize_prec_df(prec_df)
+
+    df = df[
+        ~(
+            (df["Higher Priority"] == hi)
+            & (df["Lower Priority"] == lo)
+        )
+    ]
+
+    return normalize_prec_df(df)
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/SOLUTION_UTILS.PY CODE IS BELOW
+from core.trace_utils import extract_realization
+from core.formatting import unscale_vec
+
+
+def approx_equal_vec(a, b, tol=1e-4):
+    return len(a) == len(b) and all(abs(float(a[i]) - float(b[i])) <= tol for i in range(len(a)))
+
+
+def collect_goal_vectors(trace):
+    sols = []
+
+    for evt in trace:
+        if evt.get("type") == "solution":
+            item = extract_realization(evt)
+            sols.append(unscale_vec(item["f"]))
+
+    uniq = []
+    for s in sols:
+        if not any(approx_equal_vec(s, t) for t in uniq):
+            uniq.append(s)
+
+    return uniq
+
+
+def collect_final_solution_vectors(trace):
+    for evt in trace:
+        if evt.get("type") == "final_solutions":
+            sols = []
+
+            for sol in evt.get("solutions", []):
+
+                # New Apex-style format:
+                # {"state": ..., "f": [...]}
+                if isinstance(sol, dict) and "f" in sol:
+                    sols.append(unscale_vec(list(sol.get("f", []))))
+                    continue
+
+                # Old RApex-style format:
+                # [apex_node, realization_node]
+                if isinstance(sol, list) and len(sol) >= 2:
+                    rz = sol[1]
+                    sols.append(unscale_vec(list(rz.get("full_cost", []))))
+                    continue
+
+                # Fallback dict format:
+                if isinstance(sol, dict) and "full_cost" in sol:
+                    sols.append(unscale_vec(list(sol.get("full_cost", []))))
+
+            return sols
+
+    return []
+
+
+def enumerate_paths_from_edges_df(edges_df, start_name, goal_name, k):
+    G = {}
+
+    for _, row in edges_df.iterrows():
+        u = str(row["u"]).strip()
+        v = str(row["v"]).strip()
+
+        if not u or not v:
+            continue
+
+        cost = [float(row[f"c{i}"]) for i in range(k)]
+
+        G.setdefault(u, []).append((v, cost))
+        G.setdefault(v, [])
+
+    stack = [(start_name, [start_name], set([start_name]), [0.0] * k)]
+    out = []
+
+    while stack:
+        u, path, seen, cost = stack.pop()
+
+        if u == goal_name:
+            out.append((path, cost))
+            continue
+
+        for v, w in G.get(u, []):
+            if v in seen:
+                continue
+
+            new_cost = [cost[i] + w[i] for i in range(k)]
+            stack.append((v, path + [v], seen | {v}, new_cost))
+
+    return out
+
+
+def compute_solution_edges(trace, edges_df, name_to_id, start_label, goal_label, k):
+    sol_vecs = collect_final_solution_vectors(trace)
+
+    if not sol_vecs:
+        return set()
+
+    all_paths = enumerate_paths_from_edges_df(edges_df, start_label, goal_label, k)
+
+    sol_edges = set()
+
+    for path, cost in all_paths:
+        if any(approx_equal_vec(cost, sv, tol=1e-5) for sv in sol_vecs):
+            for a, b in zip(path, path[1:]):
+                sol_edges.add((a, b))
+
+    return sol_edges
+
+
+def compute_solution_paths(trace, edges_df, name_to_id, start_label, goal_label, k):
+    sol_vecs = collect_final_solution_vectors(trace)
+    all_paths = enumerate_paths_from_edges_df(edges_df, start_label, goal_label, k)
+
+    sol_paths = []
+
+    for path, cost in all_paths:
+        if any(approx_equal_vec(cost, sv, tol=1e-5) for sv in sol_vecs):
+            sol_paths.append(path)
+
+    uniq = []
+    seen = set()
+
+    for p in sol_paths:
+        tp = tuple(p)
+        if tp not in seen:
+            seen.add(tp)
+            uniq.append(p)
+
+    return uniq
+
+
+def compute_candidate_paths(trace, edges_df, name_to_id, start_label, goal_label, k, eps_vals):
+    final_vecs = collect_final_solution_vectors(trace)
+
+    if not final_vecs:
+        return []
+
+    all_paths = enumerate_paths_from_edges_df(edges_df, start_label, goal_label, k)
+    sol_paths = compute_solution_paths(trace, edges_df, name_to_id, start_label, goal_label, k)
+    sol_path_tuples = {tuple(p) for p in sol_paths}
+
+    candidate_paths = []
+
+    for path, cost in all_paths:
+        if tuple(path) in sol_path_tuples:
+            continue
+
+    for fv in final_vecs:
+        if len(fv) != len(cost):
+            continue
+
+        ok = True
+        for i in range(len(cost)):
+            if float(cost[i]) > (1 + float(eps_vals[i])) * float(fv[i]):
+                ok = False
+                break
+
+        if ok:
+            candidate_paths.append(path)
+            break
+
+    uniq = []
+    seen = set()
+
+    for p in candidate_paths:
+        tp = tuple(p)
+        if tp not in seen:
+            seen.add(tp)
+            uniq.append(p)
+
+    return uniq
+
+
+def paths_to_edges(paths):
+    edges = set()
+
+    for path in paths:
+        for a, b in zip(path, path[1:]):
+            edges.add((a, b))
+
+    return edges
+
+def collect_final_solution_pairs(trace):
+    pairs = []
+
+    for evt in trace:
+        if evt.get("type") == "final_solutions":
+            for rp in evt.get("solutions", []):
+                if isinstance(rp, list) and len(rp) >= 2:
+                    apex = rp[0]
+                    realization = rp[1]
+
+                    pairs.append({
+                        "apex": unscale_vec(apex.get("full_cost", [])),
+                        "realization": unscale_vec(realization.get("full_cost", [])),
+                    })
+
+            return pairs
+
+    return []
+
+def collect_final_solution_paths_from_trace(trace, id_to_name):
+    paths = []
+
+    for evt in trace:
+        if evt.get("type") != "final_solutions":
+            continue
+
+        for sol in evt.get("solutions", []):
+            if isinstance(sol, dict) and "path" in sol:
+                path = [
+                    id_to_name.get(int(node_id), str(node_id))
+                    for node_id in sol["path"]
+                ]
+                paths.append(path)
+
+        return paths
+
+    return []
+
+def rulebook_leq(x, y, rule_names, prec_df, eps):
+    """
+    Return True if x <=_R^eps y under partial-order rulebook.
+    Smaller cost is better.
+    """
+
+    n = len(rule_names)
+    eps = eps if isinstance(eps, list) else [float(eps)] * n
+
+    # build rule graph
+    succ = {i: set() for i in range(n)}
+    pred_count = {i: 0 for i in range(n)}
+
+    name_to_i = {name: i for i, name in enumerate(rule_names)}
+
+    if prec_df is not None:
+        for _, row in prec_df.iterrows():
+            hi = str(row.get("Higher Priority", "")).strip()
+            lo = str(row.get("Lower Priority", "")).strip()
+
+            if not hi or not lo:
+                continue
+
+            a = name_to_i[hi] if hi in name_to_i else int(hi)
+            b = name_to_i[lo] if lo in name_to_i else int(lo)
+
+            if b not in succ[a]:
+                succ[a].add(b)
+                pred_count[b] += 1
+
+    # topological queue
+    q = [i for i in range(n) if pred_count[i] == 0]
+
+    while q:
+        r = q.pop(0)
+
+        # If x is too much worse on this rule, x is not <= y
+        if float(x[r]) > (1.0 + float(eps[r])) * float(y[r]):
+            return False
+
+        # If x is strictly better on this rule, remove successors from future consideration
+        if float(x[r]) < (1.0 + float(eps[r])) * float(y[r]):
+            blocked = list(succ[r])
+            for b in blocked:
+                if b in q:
+                    q.remove(b)
+
+        # normal topo progression
+        for s in succ[r]:
+            pred_count[s] -= 1
+            if pred_count[s] == 0 and s not in q:
+                q.append(s)
+
+    return True
+
+
+def compute_rulebook_nondominated_paths(edges_df, start_label, goal_label, k, rule_names, prec_df, eps):
+    all_paths = enumerate_paths_from_edges_df(edges_df, start_label, goal_label, k)
+
+    kept = []
+
+    for path_i, cost_i in all_paths:
+        dominated = False
+
+        for path_j, cost_j in all_paths:
+            if path_i == path_j:
+                continue
+
+            # j dominates i if j <= i and not i <= j
+            if rulebook_leq(cost_j, cost_i, rule_names, prec_df, eps) and not rulebook_leq(cost_i, cost_j, rule_names, prec_df, eps):
+                dominated = True
+                break
+
+        if not dominated:
+            kept.append((path_i, cost_i))
+
+    return kept
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/CORE/TRACE_UTILS.PY CODE IS BELOW
+import json
+import heapq
+import itertools
+from dataclasses import dataclass
+from typing import Any, List, Dict, Union
+
+Number = Union[int, float]
+
+
+@dataclass
+class TraceStepper:
+    trace: List[Dict]
+    i: int
+    OPEN: list
+    tiebreak: Any
+    last_pop: Dict | None
+    events: list
+    ordered_rules: list | None = None
+
+def _keyer(fvec: List[Number]):
+    return tuple(float(x) for x in fvec)
+
+
+def extract_realization(evt: Dict) -> Dict:
+    rp = evt.get("rp")
+
+    if isinstance(rp, list) and len(rp) >= 2:
+        rz = rp[1]
+    elif isinstance(rp, dict):
+        rz = rp
+    else:
+        rz = {}
+
+    return {
+        "state": int(rz.get("id", -1)),
+        "g": list(rz.get("cost_until_now", [])),
+        "h": list(rz.get("heuristic_cost", [])),
+        "f": list(rz.get("full_cost", [])),
+    }
+
+
+def init_from_trace(trace: List[Dict]) -> TraceStepper:
+    return TraceStepper(
+        trace=trace,
+        i=0,
+        OPEN=[],
+        tiebreak=itertools.count(0),
+        last_pop=None,
+        events=[],
+    )
+
+
+def apply_trace_step(stp: TraceStepper) -> None:
+    if stp.i >= len(stp.trace):
+        return
+
+    evt = stp.trace[stp.i]
+    stp.i += 1
+    t = evt.get("type")
+
+    if t == "meta":
+        stp.ordered_rules = evt.get("ordered_rules")
+        stp.events.append({
+            "kind": "meta",
+            "solver": evt.get("solver", "?"),
+            "ordered_rules": evt.get("ordered_rules"),
+        })
+        return
+
+    if t == "pop":
+        item = extract_realization(evt)
+        key = _keyer(item["f"])
+
+        stp.last_pop = {"state": item["state"], "f": item["f"], "key": key}
+        stp.events.append({"kind": "pop", "state": item["state"], "f": item["f"], "key": key})
+
+        for j, (k, tb, it) in enumerate(stp.OPEN):
+            if it["state"] == item["state"] and it["f"] == item["f"]:
+                stp.OPEN.pop(j)
+                heapq.heapify(stp.OPEN)
+                break
+
+        return
+
+    if t == "enqueue":
+        item = extract_realization(evt)
+        key = _keyer(item["f"])
+
+        heapq.heappush(stp.OPEN, (key, next(stp.tiebreak), item))
+
+        stp.events.append({
+            "kind": "enqueue",
+            "from": evt.get("from"),
+            "to": evt.get("to"),
+            "f": item["f"],
+        })
+        return
+
+    stp.events.append({"kind": "other", "raw": evt})
+
+
+def parse_trace_lines(raw_lines: List[str]) -> List[Dict]:
+    fixed = []
+
+    for line in raw_lines:
+
+        if '"rp":{{' in line:
+            line = line.replace('"rp":{{', '"rp":[{')
+            if line.endswith("}}}"):
+                line = line[:-3] + "}]}"
+
+        if '"solutions":[{{' in line:
+            line = line.replace('"solutions":[{{', '"solutions":[[{')
+            line = line.replace('}},{{', '}],[{')
+            if line.endswith('}}]}'):
+                line = line[:-4] + '}]]}'
+
+        fixed.append(json.loads(line))
+
+    return fixed
+
+
+def load_trace_jsonl(uploaded_file) -> List[Dict]:
+    raw_lines = uploaded_file.read().decode("utf-8").splitlines()
+    return parse_trace_lines(raw_lines)
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/EXAMPLES/__INIT__.PY CODE IS BELOW
+
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/EXAMPLES/EXAMPLES.PY CODE IS BELOW
+EXAMPLES = {
+    "2 nodes: rulebook changes winner": """{
+  "rules": ["dist", "energy"],
+  "rulebook": {
+    "classes": [["dist"], ["energy"]],
+    "edges": [["dist", "energy"]]
+  },
+  "graph": {
+    "edges": [
+      {"u":"S","v":"A","c":[5,100]},
+      {"u":"A","v":"T","c":[5,100]},
+      {"u":"S","v":"B","c":[6,1]},
+      {"u":"B","v":"T","c":[6,1]}
+    ]
+  },
+  "start": "S",
+  "goal": "T",
+  "eps": [0,0]
+}""",
+
+    "3 nodes: incomparable rule": """{
+  "rules": ["r1", "r2", "r3", "r4"],
+  "rulebook": {
+
+    "classes": [["r1"], ["r2"], ["r3"], ["r4"]],
+
+    "edges": [["r1", "r2"], ["r1", "r3"]]
+
+  },
+  "graph": {
+    "edges": [
+      {"u":"S","v":"A","c":[5,10,10,100]},
+      {"u":"A","v":"T","c":[5,10,10,100]},
+      {"u":"S","v":"B","c":[6,1,1,1]},
+      {"u":"B","v":"T","c":[6,1,1,1]},
+      {"u":"S","v":"C","c":[5,20,20,5]},
+      {"u":"C","v":"T","c":[5,20,20,5]}
+    ]
+  },
+  "start": "S",
+  "goal": "T",
+  "eps": [0,0,0,0]
+}""",
+
+    "6 nodes: mixed paths w/ tradeoffs": """{
+  "rules": ["safety", "dist", "energy"],
+  "rulebook": { "edges": [["safety", "dist"], ["safety", "energy"]] },
+  "graph": {
+    "edges": [
+      {"u":"S","v":"A","c":[1,8,8]},
+      {"u":"S","v":"B","c":[2,3,2]},
+      {"u":"S","v":"C","c":[1,10,1]},
+      {"u":"A","v":"D","c":[1,2,2]},
+      {"u":"A","v":"E","c":[2,1,5]},
+      {"u":"B","v":"D","c":[2,2,2]},
+      {"u":"B","v":"E","c":[1,5,1]},
+      {"u":"C","v":"D","c":[2,1,6]},
+      {"u":"C","v":"E","c":[1,4,1]},
+      {"u":"D","v":"T","c":[1,2,2]},
+      {"u":"E","v":"T","c":[1,1,1]}
+    ]
+  },
+  "start": "S",
+  "goal": "T",
+  "eps": [0,0,0]
+}""", 
+"Pseudo 2-goal example": """{
+  "rules": ["safety", "dist", "energy"],
+  "rulebook": {
+    "edges": [["safety", "dist"], ["safety", "energy"]]
+  },
+  "graph": {
+    "edges": [
+      {"u":"S","v":"A","c":[1,4,8]},
+      {"u":"S","v":"B","c":[2,2,2]},
+      {"u":"S","v":"C","c":[1,7,1]},
+
+      {"u":"A","v":"D","c":[1,2,2]},
+      {"u":"B","v":"D","c":[2,1,2]},
+      {"u":"C","v":"D","c":[1,4,1]},
+
+      {"u":"D","v":"T1","c":[1,2,2]},
+      {"u":"D","v":"T2","c":[2,1,1]},
+
+      {"u":"A","v":"T1","c":[2,6,2]},
+      {"u":"B","v":"T2","c":[2,3,1]},
+      {"u":"C","v":"T2","c":[1,5,1]},
+
+      {"u":"T1","v":"G","c":[0,0,0]},
+      {"u":"T2","v":"G","c":[0,0,0]}
+    ]
+  },
+  "start": "S",
+  "goal": "G",
+  "eps": [0,0,0]
+}""",
+
+}
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/RENDER/__INIT__.PY CODE IS BELOW
+
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/RENDER/CYTOSCAPE_RENDER.PY CODE IS BELOW
+from core.rulebook_classes import class_label, find_class_index
+
+# Convert equivalence-class rulebook state into Cytoscape nodes and edges.
+def rulebook_class_cytoscape_elements(rule_names, prec_df, eq_classes):
+    elements = []
+
+    for i, cls in enumerate(eq_classes):
+        elements.append({
+            "data": {
+                "id": f"class_{i}",
+                "label": class_label(cls),
+                "kind": "rule_class",
+            },
+            "position": {
+                "x": 180 * i + 80,
+                "y": 100,
+            },
+        })
+
+    seen_edges = set()
+
+    if prec_df is not None:
+        for _, row in prec_df.iterrows():
+            hi = str(row.get("Higher Priority", "")).strip()
+            lo = str(row.get("Lower Priority", "")).strip()
+
+            hi_i = find_class_index(eq_classes, hi)
+            lo_i = find_class_index(eq_classes, lo)
+
+            if hi_i is None or lo_i is None:
+                continue
+
+            if hi_i == lo_i:
+                continue
+
+            edge = (hi_i, lo_i)
+
+            if edge in seen_edges:
+                continue
+
+            seen_edges.add(edge)
+
+            elements.append({
+                "data": {
+                    "id": f"class_{hi_i}__to__class_{lo_i}",
+                    "source": f"class_{hi_i}",
+                    "target": f"class_{lo_i}",
+                    "label": "priority",
+                    "kind": "precedence",
+                }
+            })
+
+    return elements
+
+
+# Define visual styling for the rulebook Cytoscape graph.
+def rulebook_cytoscape_stylesheet():
+    return [
+        {
+            "selector": "node",
+            "style": {
+                "label": "data(label)",
+                "text-valign": "center",
+                "text-halign": "center",
+                "background-color": "#ffffff",
+                "border-width": 2,
+                "border-color": "#333333",
+                "shape": "round-rectangle",
+                "width": "label",
+                "height": "label",
+                "padding": "14px",
+            },
+        },
+        {
+            "selector": "edge",
+            "style": {
+                "curve-style": "bezier",
+                "target-arrow-shape": "triangle",
+                "line-color": "#555555",
+                "target-arrow-color": "#555555",
+                "width": 2,
+                "label": "data(label)",
+                "font-size": "10px",
+            },
+        },
+        {
+            "selector": ":selected",
+            "style": {
+                "border-width": 4,
+                "border-color": "#1f77b4",
+                "line-color": "#1f77b4",
+                "target-arrow-color": "#1f77b4",
+            },
+        },
+    ]
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/RENDER/CYTOSCAPE_RULEBOOK.PY CODE IS BELOW
+# Turn Python rulebook state into the format Cytoscape understands
+
+# Convert rule_names + prec_df into Cytoscape elements.
+# Cytoscape elements are just dictionaries representing nodes and edges.
+def rulebook_to_cytoscape_elements(rule_names, prec_df):
+    elements = []
+
+    # Add one node per rule.
+    for rule in rule_names:
+        rule = str(rule).strip()
+
+        if not rule:
+            continue
+
+        elements.append({
+            "data": {
+                "id": rule,
+                "label": rule,
+                "kind": "rule",
+            }
+        })
+
+    # Add one directed edge per precedence relation.
+    if prec_df is not None:
+        for _, row in prec_df.iterrows():
+            hi = str(row.get("Higher Priority", "")).strip()
+            lo = str(row.get("Lower Priority", "")).strip()
+
+            if not hi or not lo or hi == lo:
+                continue
+
+            elements.append({
+                "data": {
+                    "id": f"{hi}__to__{lo}",
+                    "source": hi,
+                    "target": lo,
+                    "label": f"{hi} > {lo}",
+                    "kind": "precedence",
+                }
+            })
+
+    return elements
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/RENDER/GRAPHVIZ_RENDER.PY CODE IS BELOW
+def dot_for_graph(     
+    edges_df,
+    highlight_nodes=None,
+    highlight_edges=None,
+    open_nodes=None,
+    pruned_nodes=None,
+    solution_edges=None,
+    candidate_edges=None,
+):
+
+    highlight_nodes = set(highlight_nodes or [])
+    highlight_edges = set(highlight_edges or [])
+    open_nodes = set(open_nodes or [])
+    pruned_nodes = set(pruned_nodes or [])
+    solution_edges = set(solution_edges or [])
+    candidate_edges = set(candidate_edges or [])
+
+    node_names = set()
+
+    for _, row in edges_df.iterrows():
+
+        u = str(row["u"]).strip()
+        v = str(row["v"]).strip()
+
+        if u:
+            node_names.add(u)
+        if v:
+            node_names.add(v)
+
+    node_lines = []
+    edge_lines = []
+
+    for name in sorted(node_names):
+
+        fill = 'fillcolor="white"'
+        style_bits = ["filled"]
+        extra = []
+
+        if name in open_nodes:
+            fill = 'fillcolor="lightyellow"'
+
+        if name in highlight_nodes:
+            fill = 'fillcolor="cyan"'
+
+        if name in pruned_nodes:
+            extra += ['color="red"', 'penwidth=2']
+            style_bits.append("dashed")
+
+        node_lines.append(
+            f'"{name}" [shape=circle, style="{",".join(style_bits)}", {fill}'
+            + (", " + ", ".join(extra) if extra else "")
+            + "];"
+        )
+
+    for _, row in edges_df.iterrows():
+
+        u = str(row["u"]).strip()
+        v = str(row["v"]).strip()
+
+        if not u or not v:
+            continue
+
+        label = "[" + ",".join(
+            str(row[c]) for c in edges_df.columns if str(c).startswith("c")
+        ) + "]"
+
+        edge_color = "gray"
+        penwidth = "1"
+
+        if (u, v) in solution_edges:
+            edge_color = "green"
+            penwidth = "4"
+
+        elif (u, v) in candidate_edges:
+            edge_color = "orange"
+            penwidth = "3"
+
+        elif (u, v) in highlight_edges:
+            edge_color = "blue"
+            penwidth = "3"
+
+        edge_lines.append(
+            f'"{u}" -> "{v}" [label="{label}", color="{edge_color}", penwidth={penwidth}];'
+        )
+
+    lines = [
+        "digraph G {",
+        'rankdir="LR";',
+        "node [fontname=Helvetica];",
+        "edge [fontname=Helvetica];",
+        *node_lines,
+        *edge_lines,
+        "}",
+    ]
+
+    return "\n".join(lines)
+
+def dot_for_rule_graph(rule_names, prec_df):
+    rule_names = [str(r).strip() for r in rule_names if str(r).strip()]
+
+    edges = []
+    if prec_df is not None:
+        for _, row in prec_df.iterrows():
+            hi = str(row.get("Higher Priority", "")).strip()
+            lo = str(row.get("Lower Priority", "")).strip()
+            if hi and lo:
+                edges.append((hi, lo))
+
+    lines = [
+        "digraph Rulebook {",
+        'rankdir="TB";',
+        "node [shape=box, style=filled, fillcolor=white, fontname=Helvetica];",
+        "edge [fontname=Helvetica];",
+    ]
+
+    for r in rule_names:
+        lines.append(f'"{r}";')
+
+    for hi, lo in edges:
+        lines.append(f'"{hi}" -> "{lo}";')
+
+    lines.append("}")
+    return "\n".join(lines)
+
+
+# Draw the rulebook using equivalence classes as graph nodes.
+def dot_for_rule_class_graph(rule_names, prec_df, eq_classes):
+    from core.rulebook_classes import class_label, find_class_index
+
+    lines = [
+        "digraph Rulebook {",
+        'rankdir="TB";',
+        "node [shape=box, style=filled, fillcolor=white, fontname=Helvetica];",
+        "edge [fontname=Helvetica];",
+    ]
+
+    for i, cls in enumerate(eq_classes):
+        lines.append(f'"class_{i}" [label="{class_label(cls)}"];')
+
+    seen_edges = set()
+
+    if prec_df is not None:
+        for _, row in prec_df.iterrows():
+            hi = str(row.get("Higher Priority", "")).strip()
+            lo = str(row.get("Lower Priority", "")).strip()
+
+            hi_i = find_class_index(eq_classes, hi)
+            lo_i = find_class_index(eq_classes, lo)
+
+            if hi_i is None or lo_i is None:
+                continue
+
+            if hi_i == lo_i:
+                continue
+
+            edge = (hi_i, lo_i)
+
+            if edge in seen_edges:
+                continue
+
+            seen_edges.add(edge)
+
+            lines.append(f'"class_{hi_i}" -> "class_{lo_i}";')
+
+    lines.append("}")
+    return "\n".join(lines)
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/RASTARPEX_INFO_TAB.PY CODE IS BELOW
+import streamlit as st
+
+# ---------- info tab for RA*pex ------------
+def render_RAstarpex_info_tab():
+    st.header("What is RA*pex?")
+
+    st.markdown("""
+    RA*pex is a rulebook-based multi-objective search algorithm.
+
+    In a normal shortest-path problem, each edge has one cost, like distance.  
+    Here, each edge has a **cost vector**, such as:
+
+    `[distance, energy, time]`
+
+    The goal is to find paths that are good according to a **rulebook**, not just one number.
+    """)
+
+    st.subheader("Rulebook")
+    st.markdown("""
+    A rulebook defines which objectives have priority.
+
+    For example:
+
+    `distance > energy`
+
+    means distance is considered before energy when comparing paths.
+
+    The rulebook can also be a partial order, meaning some objectives may be incomparable.
+    """)
+
+    st.subheader("Rule-dominance")
+    st.markdown("""
+    Rulebooks change how paths are compared.
+
+    A path can be worse in a lower-priority objective and still be preferred if it is better in a higher-priority objective.
+
+    For example, if:
+
+    `safety > distance`
+
+    then a path with better safety may dominate another path even though it has worse distance.
+    """)
+
+    st.subheader("OPEN queue")
+    st.markdown("""
+    RA*pex uses a priority queue called **OPEN** to manage the search frontier.
+
+    Each node has:
+
+    - `g`: cost accumulated so far
+    - `h`: heuristic estimate to the goal
+    - `f = g + h`: estimated total cost
+
+    Nodes in OPEN are ordered lexicographically using some topological ordering of the rulebook graph.
+    """)
+
+    st.subheader("Pruning Nodes")
+    st.markdown("""
+    RA*pex does not expand every possible path.
+
+    When a candidate is popped from OPEN, the algorithm checks whether it is already covered by:
+    - a previously expanded pair at the same state, or
+    - an existing representative solution.
+
+    If so, the candidate is pruned because continuing from it cannot produce a meaningfully better solution.
+    """)
+
+    st.subheader("Apex vs realization")
+    st.markdown("""
+    A **realization** is an actual path in the graph.
+
+    An **apex** is an idealized summary vector. It may combine the best compatible cost components from multiple paths.
+
+    So the visualization shows a representative realization, while the apex summarizes what is achievable under the rulebook.
+    """)
+
+    st.subheader("Epsilon approximation")
+    st.markdown("""
+    `ε` controls approximation.
+
+    With larger epsilon, near-optimal paths may be treated as acceptable. This can reduce the number of nodes expanded and focus the search on more relevant solutions.
+    """)
+
+    st.subheader("Path merging")
+    st.markdown("""
+    RA*pex can merge compatible search pairs.
+
+    When two pairs represent similar sets of paths, the algorithm keeps one representative realization and updates the apex using the component-wise minimum of their apex vectors.
+
+    As a result, the apex does not correspond to one single path on the graph, but instead acts as a summary of the best components from multiple paths.
+    """)
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/__INIT__.PY CODE IS BELOW
+
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/COMPARISON_VIEW.PY CODE IS BELOW
+import streamlit as st
+
+from render.graphviz_render import dot_for_graph
+
+def render_comparison_view(edges_df, algo_right):
+    if "compare_left" not in st.session_state or "compare_right" not in st.session_state:
+        st.info("Build a graph and click **Run Comparison**.")
+        st.stop()
+
+    left = st.session_state.compare_left
+    right = st.session_state.compare_right
+
+    st.subheader("Comparison summary")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### RApex")
+        st.code(left["stats_text"] or "(no stats)")
+
+        if left["has_trace"]:
+            dot_left = dot_for_graph(edges_df, solution_edges=left["solution_edges"], candidate_edges=left["candidate_edges"],)
+            st.graphviz_chart(dot_left)
+
+            if left["solution_paths"]:
+                st.markdown("**Representative realization(s)**")
+                for p in left["solution_paths"]:
+                    st.write(" -> ".join(p))
+
+            if left["candidate_paths"]:
+                st.markdown("**Also considered under epsilon**")
+                for p in left["candidate_paths"]:
+                    st.write(" -> ".join(p))
+        else:
+            st.info("No trace available for this algorithm yet.")
+            st.code(left["stdout"] or "(no stdout)")
+
+    with c2:
+        st.markdown(f"### {algo_right}")
+        st.code(right["stats_text"] or "(no stats)")
+
+        if right["has_trace"]:
+            dot_right = dot_for_graph(edges_df, solution_edges=right["solution_edges"], candidate_edges=right["candidate_edges"],)
+            st.graphviz_chart(dot_right)
+
+            if right["solution_paths"]:
+                st.markdown("**Representative realization(s)**")
+                for p in right["solution_paths"]:
+                    st.write(" -> ".join(p))
+
+            if right["candidate_paths"]:
+                st.markdown("**Also considered under epsilon**")
+                for p in right["candidate_paths"]:
+                    st.write(" -> ".join(p))
+        else:
+            st.info("No trace available for this algorithm yet.")
+            st.code(right["stdout"] or "(no stdout)")
+
+    st.markdown("### Stats legend")
+
+    st.markdown(
+    """
+    **Output format**
+
+    `Algorithm-eps (...) | objectives | nodes | edges | node expansions | solutions | runtime (seconds)`
+
+    Example:
+
+    `RApex-eps (0,0,0) 3 4 5 4 1 0.000409`
+
+    means:
+
+    - **3** → number of objectives
+    - **4** → nodes in the graph
+    - **5** → edges in the graph
+    - **4** → nodes expanded during search
+    - **1** → number of solutions returned
+    - **0.000409** → runtime in seconds
+    """
+    )
+
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/JSON_IMPORT_SECTION.PY CODE IS BELOW
+import streamlit as st
+import json
+import pandas as pd
+
+from examples.examples import EXAMPLES
+
+from core.json_problem import parse_problem_json, problem_state_to_json
+# ------------ JSON input ----------
+
+def render_json_import_section():
+
+    st.header("Import / Export JSON")
+
+    with st.expander("Upload or paste JSON problem"):
+        
+        uploaded_json = st.file_uploader(
+            "Upload JSON",
+            type=["json"],
+            key="problem_json",
+        )
+
+        example_name = st.selectbox(
+            "Use example",
+            [""] + list(EXAMPLES.keys()),
+        )
+
+        if st.button("Load selected example"):
+            if example_name:
+                st.session_state.sample_json_text = EXAMPLES[example_name]
+                st.rerun()
+
+        pasted_json = st.text_area(
+            "Or paste JSON here",
+            value=st.session_state.get("sample_json_text", ""),
+            height=220,
+        )
+
+        if st.button("Load JSON problem"):
+            try:
+                raw = None
+
+                if uploaded_json is not None:
+                    raw = uploaded_json.read().decode("utf-8")
+                elif pasted_json.strip():
+                    raw = pasted_json
+
+                if not raw:
+                    st.warning("Provide a JSON file or paste JSON text.")
+
+                else:
+                    parsed = parse_problem_json(raw)
+
+                    loaded_rule_names = parsed["rule_names"]
+                    loaded_eps = parsed["eps"]
+
+                    old_k = st.session_state.get(
+                        "k",
+                        len(loaded_rule_names),
+                    )
+
+                    st.session_state.k = len(loaded_rule_names)
+                    st.session_state.rule_names_csv = ",".join(loaded_rule_names)
+
+                    st.session_state.start_label = parsed["start"]
+                    st.session_state.goal_label = parsed["goal"]
+
+                    st.session_state.eps_values = loaded_eps
+                    st.session_state.eq_classes = parsed["eq_classes"]
+                    st.session_state.prec_df = parsed["prec_df"]
+                    st.session_state.edges_df = parsed["edges_df"]
+
+                    for i, val in enumerate(loaded_eps):
+                        st.session_state[f"eps_{i}"] = float(val)
+
+                    for i in range(len(loaded_rule_names), old_k):
+                        st.session_state.pop(f"eps_{i}", None)
+
+                    st.success("Loaded problem from JSON.")
+                    st.rerun()
+
+            except Exception as e:
+                st.exception(e)
+                
+    with st.expander("Export current JSON"):
+        required_keys = [
+            "rule_names_csv",
+            "eq_classes",
+            "prec_df",
+            "edges_df",
+            "start_label",
+            "goal_label",
+            "eps_values",
+        ]
+
+        if all(key in st.session_state for key in required_keys):
+            rule_names = [
+                r.strip()
+                for r in st.session_state.rule_names_csv.split(",")
+                if r.strip()
+            ]
+
+            exported_json = problem_state_to_json(
+                rule_names=rule_names,
+                eq_classes=st.session_state.eq_classes,
+                prec_df=st.session_state.prec_df,
+                edges_df=st.session_state.edges_df,
+                start=st.session_state.start_label,
+                goal=st.session_state.goal_label,
+                eps=st.session_state.eps_values,
+            )
+
+            st.code(exported_json, language="json")
+
+            st.download_button(
+                "Download JSON",
+                data=exported_json,
+                file_name="rulebook_problem.json",
+                mime="application/json",
+                key="download_problem_json",
+            )
+        else:
+            st.caption("Build or load a problem before exporting JSON.")
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/PROBLEM_GRAPH_SECTION.PY CODE IS BELOW
+import streamlit as st
+import pandas as pd
+
+from core.solution_utils import compute_rulebook_nondominated_paths
+
+from core.problem_graph_state import sync_edge_cost_columns
+
+def render_problem_graph_section(k, rule_names, start_label, goal_label, prec_df, eps):
+
+    st.header("Problem graph edges")
+
+    need_cols = ["u", "v"] + [f"c{i}" for i in range(k)]
+
+    if "edges_df" not in st.session_state:
+        seed = pd.DataFrame([
+            {"u": "S", "v": "A"},
+            {"u": "A", "v": "T"},
+        ])
+        st.session_state.edges_df = sync_edge_cost_columns(seed, k)
+    else:
+        st.session_state.edges_df = sync_edge_cost_columns(
+            st.session_state.edges_df,
+            k,
+        )
+
+    edges_df = st.data_editor(
+        st.session_state.edges_df,
+        key="edges_editor",
+        use_container_width=True,
+        num_rows="dynamic"
+    )
+    st.session_state.edges_df = edges_df
+
+    with st.expander("Rulebook-nondominated path sanity check"):
+        try:
+            nondom = compute_rulebook_nondominated_paths(
+                edges_df,
+                start_label,
+                goal_label,
+                k,
+                rule_names,
+                prec_df,
+                eps,
+            )
+
+            if nondom:
+                rows = []
+                for path, cost in nondom:
+                    row = {"Path": " -> ".join(path)}
+                    for i, rn in enumerate(rule_names):
+                        row[rn] = cost[i]
+                    rows.append(row)
+
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            else:
+                st.caption("No complete start-to-goal paths found.")
+        except Exception as e:
+            st.warning(f"Could not compute sanity check: {e}")
+    
+    return edges_df
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/RULE_MANAGEMENT_PANEL.PY CODE IS BELOW
+import streamlit as st
+
+from core.rule_management import (
+    add_rule,
+    rename_rule,
+    delete_rule,
+)
+
+from core.problem_graph_state import sync_edge_cost_columns
+
+# Render controls for adding, renaming, and deleting rules.
+def render_rule_management_panel(rule_names, prec_df, eps):
+    with st.expander("Manage rules"):
+        st.subheader("Add rule")
+
+        new_rule_name = st.text_input(
+            "New rule name",
+            key="manage_new_rule_name",
+        )
+
+        if st.button("Add rule", key="manage_add_rule"):
+            try:
+                rule_names, eq_classes, eps = add_rule(
+                    rule_names,
+                    st.session_state.eq_classes,
+                    eps,
+                    new_rule_name,
+                )
+
+                st.session_state.eq_classes = eq_classes
+                sync_rule_session_state(rule_names, eps)
+
+                if "edges_df" in st.session_state:
+                    st.session_state.edges_df = sync_edge_cost_columns(
+                        st.session_state.edges_df,
+                        len(rule_names),
+                    )
+
+                st.rerun()
+            except Exception as e:
+                st.warning(str(e))
+
+        st.divider()
+
+        st.subheader("Rename rule")
+
+        old_name = st.selectbox(
+            "Rule to rename",
+            rule_names,
+            key="manage_rename_old",
+        )
+
+        new_name = st.text_input(
+            "New name",
+            key="manage_rename_new",
+        )
+
+        if st.button("Rename rule", key="manage_rename_rule"):
+            try:
+                rule_names, eq_classes, prec_df = rename_rule(
+                    rule_names,
+                    st.session_state.eq_classes,
+                    prec_df,
+                    old_name,
+                    new_name,
+                )
+
+                st.session_state.eq_classes = eq_classes
+                st.session_state.prec_df = prec_df
+
+                sync_rule_session_state(rule_names,st.session_state.eps_values,)
+
+                st.rerun()
+            except Exception as e:
+                st.warning(str(e))
+
+        st.divider()
+
+        st.subheader("Delete rule")
+
+        rule_to_delete = st.selectbox(
+            "Rule to delete",
+            rule_names,
+            key="manage_delete_rule_select",
+        )
+
+        if st.button("Delete rule", key="manage_delete_rule"):
+            try:
+                rule_names, eq_classes, prec_df, eps = delete_rule(
+                    rule_names,
+                    st.session_state.eq_classes,
+                    prec_df,
+                    eps,
+                    rule_to_delete,
+                )
+
+                st.session_state.eq_classes = eq_classes
+                st.session_state.prec_df = prec_df
+
+                sync_rule_session_state(rule_names, eps)
+
+                if "edges_df" in st.session_state:
+                    st.session_state.edges_df = sync_edge_cost_columns(
+                        st.session_state.edges_df,
+                        len(rule_names),
+                    )
+                    
+                st.rerun()
+
+            except Exception as e:
+                st.warning(str(e))
+
+
+# Store rule updates to apply safely before widgets render on next rerun.
+def sync_rule_session_state(rule_names, eps):
+    st.session_state.pending_rule_names_csv = ",".join(rule_names)
+    st.session_state.pending_eps_values = eps
+    st.session_state.pending_k = len(rule_names)
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/RULEBOOK_CYCLE_PANEL.PY CODE IS BELOW
+import streamlit as st
+
+from core.rulebook_cycles import find_sccs, edges_inside_component
+from core.rulebook_classes import (
+    collapse_rules_into_class,
+    remove_edges_inside_classes,
+)
+
+# Detect cycles in the rulebook and show user-facing ways to resolve them.
+def render_rulebook_cycle_panel(rule_names, prec_df):
+    cycle_components = find_sccs(rule_names, prec_df)
+
+    if not cycle_components:
+        return False
+
+    st.error("Cycle detected in the rulebook.")
+
+    for comp in cycle_components:
+        st.markdown(
+            "**Involved rules:** " + ", ".join(f"`{r}`" for r in comp)
+        )
+
+        internal_edges = edges_inside_component(prec_df, comp)
+
+        if len(comp) == 2:
+            r1, r2 = comp
+
+            st.warning(
+                f"Rules `{r1}` and `{r2}` currently claim priority over each other."
+            )
+
+            st.markdown(
+                """
+Choose one:
+
+**A)** Treat the two rules as having equal priority.
+
+**B)** Remove one of the conflicting preferences.
+"""
+            )
+
+            c1, c2, c3 = st.columns(3)
+
+            if c1.button(
+                f"Treat {r1} and {r2} as equal priority",
+                key=f"eq_{r1}_{r2}",
+            ):
+                st.session_state.eq_classes = collapse_rules_into_class(
+                    st.session_state.eq_classes,
+                    comp,
+                )
+
+                st.session_state.prec_df = remove_edges_inside_classes(
+                    prec_df,
+                    st.session_state.eq_classes,
+                )
+
+                st.rerun()
+
+            edge_lookup = {(a, b): idx for idx, a, b in internal_edges}
+
+            if (r1, r2) in edge_lookup:
+                if c2.button(
+                    f"Remove {r1} > {r2}",
+                    key=f"remove_{r1}_{r2}",
+                ):
+                    st.session_state.prec_df = prec_df.drop(
+                        edge_lookup[(r1, r2)]
+                    ).reset_index(drop=True)
+                    st.rerun()
+
+            if (r2, r1) in edge_lookup:
+                if c3.button(
+                    f"Remove {r2} > {r1}",
+                    key=f"remove_{r2}_{r1}",
+                ):
+                    st.session_state.prec_df = prec_df.drop(
+                        edge_lookup[(r2, r1)]
+                    ).reset_index(drop=True)
+                    st.rerun()
+
+        else:
+            st.warning(
+                "For 3 or more rules, this cycle is ambiguous. You can either "
+                "collapse the involved rules into one equal-priority group, or "
+                "manually remove edges to make the rulebook acyclic."
+            )
+
+            c_a, c_b = st.columns(2)
+
+            if c_a.button(
+                "Treat involved rules as same priority",
+                key=f"collapse_{'_'.join(comp)}",
+            ):
+                st.session_state.eq_classes = collapse_rules_into_class(
+                    st.session_state.eq_classes,
+                    comp,
+                )
+
+                st.session_state.prec_df = remove_edges_inside_classes(
+                    prec_df,
+                    st.session_state.eq_classes,
+                )
+
+                st.rerun()
+
+            if c_b.button(
+                "Show edges to edit manually",
+                key=f"show_edges_{'_'.join(comp)}",
+            ):
+                st.session_state[f"show_cycle_edges_{'_'.join(comp)}"] = True
+
+            if st.session_state.get(f"show_cycle_edges_{'_'.join(comp)}", False):
+                st.markdown("Edges involved in the cycle:")
+
+                for _, a, b in internal_edges:
+                    st.markdown(f"- `{a} > {b}`")
+
+    return True
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/RULEBOOK_SECTION.PY CODE IS BELOW
+import streamlit as st
+import pandas as pd
+
+from streamlit_cytoscapejs import st_cytoscapejs
+
+from render.graphviz_render import dot_for_rule_class_graph
+from render.cytoscape_render import (
+    rulebook_class_cytoscape_elements,
+    rulebook_cytoscape_stylesheet,
+)
+
+from core.rulebook_state import normalize_prec_df
+from core.rulebook_classes import default_eq_classes, class_label
+
+from ui.rule_management_panel import render_rule_management_panel
+from ui.rulebook_selection_panel import render_rulebook_selection_panel
+from ui.rulebook_cycle_panel import render_rulebook_cycle_panel
+
+
+# Purpose:
+# Render the rulebook editor section.
+# Cytoscape is the main editor, while the table/Graphviz views are advanced previews.
+def render_rulebook_section(rule_names):
+    if "prec_df" not in st.session_state:
+        st.session_state.prec_df = pd.DataFrame(
+            columns=["Higher Priority", "Lower Priority"]
+        )
+
+    if "eps_values" not in st.session_state:
+        st.session_state.eps_values = [0.0] * len(rule_names)
+
+    if "eq_classes" not in st.session_state:
+        st.session_state.eq_classes = default_eq_classes(rule_names)
+
+    flat_rules = {
+        rule
+        for cls in st.session_state.eq_classes
+        for rule in cls
+    }
+
+    if set(rule_names) != flat_rules:
+        st.session_state.eq_classes = default_eq_classes(rule_names)
+
+    st.header("Rulebook editor")
+
+    render_rule_management_panel(
+        rule_names,
+        st.session_state.prec_df,
+        st.session_state.eps_values,
+    )
+
+    prec_df = normalize_prec_df(st.session_state.prec_df)
+    st.session_state.prec_df = prec_df
+
+    st.subheader("Interactive rulebook preview")
+    st.caption(
+        "Click a rule class to add/delete priority edges or split equivalence classes."
+    )
+    st.caption(
+    "Click a rule class to select it. Use the selected-class panel to add/remove "
+    "priority edges or split equivalence classes."
+    )
+
+    selected = st_cytoscapejs(
+        elements=rulebook_class_cytoscape_elements(
+            rule_names,
+            prec_df,
+            st.session_state.eq_classes,
+        ),
+        stylesheet=rulebook_cytoscape_stylesheet(),
+        width=700,
+        height=350,
+        key="rulebook_cytoscape",
+    )
+
+    render_rulebook_selection_panel(selected, prec_df)
+
+    has_cycle = render_rulebook_cycle_panel(rule_names, prec_df)
+
+    if has_cycle:
+        st.stop()
+
+    with st.expander("Same-priority groups"):
+        st.caption("Rules in the same bracket are treated as equivalent priority.")
+
+        for i, cls in enumerate(st.session_state.eq_classes):
+            st.write(f"Class {i}: `{class_label(cls)}`")
+
+    with st.expander("Advanced: rule precedence table"):
+        st.caption(
+            "Manual edge list. Each row means Higher Priority > Lower Priority."
+        )
+
+        edited_prec_df = st.data_editor(
+            st.session_state.prec_df,
+            key="prec_editor",
+            use_container_width=True,
+            num_rows="dynamic",
+        )
+
+        st.session_state.prec_df = normalize_prec_df(edited_prec_df)
+        prec_df = st.session_state.prec_df
+
+    with st.expander("Static rule graph preview"):
+        st.caption("Graphviz preview of the same rulebook state.")
+
+        st.graphviz_chart(
+            dot_for_rule_class_graph(
+                rule_names,
+                prec_df,
+                st.session_state.eq_classes,
+            )
+        )
+
+    return prec_df
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/RULEBOOK_SELECTION_PANEL.PY CODE IS BELOW
+import streamlit as st
+
+from core.rulebook_classes import class_label, find_class_index
+from core.rulebook_edit import (
+    split_equivalence_class,
+    add_class_edge,
+    delete_class_edge,
+)
+
+
+# Show controls for the currently selected Cytoscape rule class.
+def render_rulebook_selection_panel(selected, prec_df):
+    st.write("Selected:", selected)
+
+    if not selected or "selected_node_id" not in selected:
+        return
+
+    node_id = selected["selected_node_id"]
+
+    if not node_id.startswith("class_"):
+        return
+
+    class_idx = int(node_id.replace("class_", ""))
+
+    if class_idx >= len(st.session_state.eq_classes):
+        st.caption("Selection is stale after the rulebook changed. Click a node again.")
+        return
+
+    selected_class = st.session_state.eq_classes[class_idx]
+
+    st.subheader("Selected rule class")
+    st.write(f"Class {class_idx}: `{class_label(selected_class)}`")
+
+    outgoing = []
+    incoming = []
+
+    for _, row in st.session_state.prec_df.iterrows():
+        hi = str(row["Higher Priority"]).strip()
+        lo = str(row["Lower Priority"]).strip()
+
+        hi_idx = find_class_index(st.session_state.eq_classes, hi)
+        lo_idx = find_class_index(st.session_state.eq_classes, lo)
+
+        if hi_idx == class_idx and lo_idx is not None:
+            outgoing.append(lo_idx)
+
+        if lo_idx == class_idx and hi_idx is not None:
+            incoming.append(hi_idx)
+
+    st.caption("Current priority relations for selected class:")
+
+    if outgoing:
+        st.write(
+            "Higher than: "
+            + ", ".join(
+                f"`{class_label(st.session_state.eq_classes[i])}`"
+                for i in sorted(set(outgoing))
+            )
+        )
+    else:
+        st.write("Higher than: none")
+
+    if incoming:
+        st.write(
+            "Lower than: "
+            + ", ".join(
+                f"`{class_label(st.session_state.eq_classes[i])}`"
+                for i in sorted(set(incoming))
+            )
+        )
+    else:
+        st.write("Lower than: none")
+
+    if len(selected_class) == 1:
+        st.caption("This is a single-rule class.")
+    else:
+        st.caption("This is a same-priority equivalence class.")
+
+    other_class_options = [
+        i for i in range(len(st.session_state.eq_classes))
+        if i != class_idx
+    ]
+
+    if other_class_options:
+        target_idx = st.selectbox(
+            "Target class",
+            other_class_options,
+            format_func=lambda i: class_label(st.session_state.eq_classes[i]),
+            key="cyto_target_class",
+        )
+
+        c1, c2 = st.columns(2)
+
+        if c1.button("Add selected > target", key="cyto_add_out_edge"):
+            st.session_state.prec_df = add_class_edge(
+                st.session_state.prec_df,
+                st.session_state.eq_classes,
+                class_idx,
+                target_idx,
+            )
+            st.rerun()
+
+        if c2.button("Add target > selected", key="cyto_add_in_edge"):
+            st.session_state.prec_df = add_class_edge(
+                st.session_state.prec_df,
+                st.session_state.eq_classes,
+                target_idx,
+                class_idx,
+            )
+            st.rerun()
+
+        if st.button("Delete edge selected > target", key="cyto_delete_out_edge"):
+            st.session_state.prec_df = delete_class_edge(
+                st.session_state.prec_df,
+                st.session_state.eq_classes,
+                class_idx,
+                target_idx,
+            )
+            st.rerun()
+
+    if len(selected_class) > 1:
+        if st.button("Split equivalence class", key="cyto_split_class"):
+            st.session_state.eq_classes = split_equivalence_class(
+                st.session_state.eq_classes,
+                class_idx,
+            )
+            st.rerun()
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/RUN_CONTROLS.PY CODE IS BELOW
+import streamlit as st
+
+from backend.backend_runner import run_algorithm
+
+def render_run_controls(
+    mode,
+    edges_df,
+    rule_names,
+    eps,
+    prec_df,
+    start_label,
+    goal_label,
+    cutoff,
+    merge,
+    algo_left=None,
+    algo_right=None,
+    eq_classes = None, 
+):
+    if mode == "Single Run":
+        run_btn = st.button("Run RApex")
+
+        if run_btn:
+            try:
+                result = run_algorithm(
+                    algorithm_name="RApex",
+                    edges_df=edges_df,
+                    rule_names=rule_names,
+                    eps=eps,
+                    prec_df=prec_df,
+                    start_label=start_label,
+                    goal_label=goal_label,
+                    cutoff=cutoff,
+                    merge=merge,
+                    eq_classes=eq_classes,
+                )
+
+                st.session_state.trace = result["trace"]
+                st.session_state.trace_stepper = result["trace_stepper"]
+                st.session_state.last_run_stdout = result["stdout"]
+                st.session_state.last_run_stderr = result["stderr"]
+                st.session_state.last_run_stats = result["stats_text"]
+                st.session_state.name_to_id = result["name_to_id"]
+                st.session_state.solution_edges = result["solution_edges"]
+                st.session_state.solution_paths = result["solution_paths"]
+                st.session_state.candidate_edges = result["candidate_edges"]
+                st.session_state.candidate_paths = result["candidate_paths"]
+
+                st.success(f"Loaded {len(result['trace'])} trace events.")
+            except Exception as e:
+                st.exception(e)
+
+    else:
+        compare_btn = st.button("Run RApex vs Benchmark")
+
+        if compare_btn:
+            try:
+                left = run_algorithm(
+                    algorithm_name=algo_left,
+                    edges_df=edges_df,
+                    rule_names=rule_names,
+                    eps=eps,
+                    prec_df=prec_df,
+                    start_label=start_label,
+                    goal_label=goal_label,
+                    cutoff=cutoff,
+                    merge=merge,
+                    eq_classes=eq_classes,
+                )
+
+                right = run_algorithm(
+                    algorithm_name=algo_right,
+                    edges_df=edges_df,
+                    rule_names=rule_names,
+                    eps=eps,
+                    prec_df=prec_df,
+                    start_label=start_label,
+                    goal_label=goal_label,
+                    cutoff=cutoff,
+                    merge=merge,
+                    eq_classes=eq_classes,
+                )
+
+                st.session_state.compare_left = left
+                st.session_state.compare_right = right
+
+                st.success("Loaded comparison results.")
+            except Exception as e:
+                st.exception(e)
+
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/SIDEBAR_CONTROLS.PY CODE IS BELOW
+# ui/sidebar_controls.py
+
+import streamlit as st
+from core.algorithm_rules import allowed_algorithms
+
+def render_sidebar_controls(mode):
+    with st.sidebar:
+        st.header("1) Rules")
+
+        k = st.number_input(
+            "Number of rules (dimensions)",
+            min_value=0,
+            max_value=100,
+            step=1,
+            key="k"
+        )
+
+        if len(st.session_state.eps_values) != k:
+            old = st.session_state.eps_values
+            if len(old) < k:
+                st.session_state.eps_values = old + [0.0] * (k - len(old))
+            else:
+                st.session_state.eps_values = old[:k]
+
+        current_names = [x.strip() for x in st.session_state.rule_names_csv.split(",") if x.strip()]
+        if len(current_names) != k:
+            st.session_state.rule_names_csv = ",".join(f"r{i}" for i in range(k))
+
+        rule_names_csv = st.text_input(
+            "Rule names (comma-separated)",
+            key="rule_names_csv"
+        )
+        rule_names = [x.strip() for x in rule_names_csv.split(",") if x.strip()]
+
+        st.header("2) Start / Goal")
+        start_label = st.text_input("Start node label", key="start_label")
+        goal_label = st.text_input("Goal node label", key="goal_label")
+
+        st.header("3) epsilon")
+        eps = []
+        for i in range(k):
+            eps_i = st.number_input(
+                f"eps[{i}]",
+                min_value=0.0,
+                step=0.1,
+                value=float(st.session_state.eps_values[i]),
+                key=f"eps_{i}"
+            )
+            eps.append(float(eps_i))
+
+        st.session_state.eps_values = eps
+
+        st.header("4) Run options")
+        cutoff = int(st.number_input("cutoffTime (sec)", min_value=1, value=10, step=1))
+        merge = st.selectbox("merge strategy", ["RANDOM", "SMALLER_G2", "MORE_SLACK"], index=0)
+
+        if mode == "Compare Algorithms":
+            st.header("5) Compare")
+
+            algo_left = "RApex"
+
+            algo_right = st.selectbox(
+                "Compare RApex against",
+                [a for a in allowed_algorithms(k) if a != "RApex"],
+                index=0
+            )
+
+    return {
+        "k": k,
+        "rule_names": rule_names,
+        "start_label": start_label,
+        "goal_label": goal_label,
+        "eps": eps,
+        "cutoff": cutoff,
+        "merge": merge,
+        "algo_left": "RApex" if mode == "Compare Algorithms" else None,
+        "algo_right": algo_right if mode == "Compare Algorithms" else None,
+    }
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/UI/SINGLE_RUN_VIEW.PY CODE IS BELOW
+import streamlit as st
+import pandas as pd
+
+from core.trace_utils import apply_trace_step, init_from_trace, extract_realization
+from core.formatting import unscale_vec, pretty_vec
+from render.graphviz_render import dot_for_graph
+from core.solution_utils import collect_goal_vectors, collect_final_solution_pairs
+from core.labels import id_to_label
+from core.rulebook_classes import class_label
+
+def render_single_run_view(edges_df, rule_names):
+    if "trace_stepper" not in st.session_state:
+            st.info("Build a graph and click **Run RApex**.")
+            st.stop()
+
+    stp = st.session_state.trace_stepper
+
+    with st.expander("Last run output"):
+        st.code(st.session_state.get("last_run_stdout", ""))
+        st.code(st.session_state.get("last_run_stderr", ""))
+        st.code(st.session_state.get("last_run_stats", ""))
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    if c1.button("Reset"):
+        st.session_state.trace_stepper = init_from_trace(st.session_state.trace)
+        st.rerun()
+
+    if c2.button("Next Iteration"):
+        apply_trace_step(stp)
+
+    if c3.button("Run 10 iterations"):
+        for _ in range(10):
+            apply_trace_step(stp)
+
+    if c4.button("Instant solve"):
+        while stp.i < len(stp.trace):
+            apply_trace_step(stp)
+
+    st.divider()
+
+    name_to_id = st.session_state.get("name_to_id", {})
+    id_to_name = {v: k for k, v in name_to_id.items()}
+
+    cur_node = set()
+    if stp.last_pop:
+        cur_node = {id_to_name.get(stp.last_pop["state"], str(stp.last_pop["state"]))}
+
+    open_nodes = {
+        id_to_name.get(it["state"], str(it["state"]))
+        for (_, _, it) in stp.OPEN
+    }
+
+    highlight_edges = set()
+    pruned_nodes = set()
+
+    for e in reversed(stp.events):
+        if e["kind"] == "pop" and e is not stp.events[-1]:
+            break
+        if e["kind"] == "enqueue":
+            frm = id_to_name.get(e["from"], str(e["from"])) if e.get("from") is not None else None
+            to = id_to_name.get(e["to"], str(e["to"])) if e.get("to") is not None else None
+            if frm and to:
+                highlight_edges.add((frm, to))
+        if e["kind"] == "prune":
+            s = e.get("state")
+            if s is not None:
+                pruned_nodes.add(id_to_name.get(s, str(s)))
+
+    shown_solution_edges = set()
+    shown_candidate_edges = set()
+
+    if stp.i >= len(stp.trace):
+        shown_solution_edges = st.session_state.get("solution_edges", set())
+        shown_candidate_edges = st.session_state.get("candidate_edges", set())
+
+    dot = dot_for_graph(
+        edges_df,
+        highlight_nodes=cur_node,
+        highlight_edges=highlight_edges,
+        open_nodes=open_nodes,
+        pruned_nodes=pruned_nodes,
+        solution_edges=shown_solution_edges,
+        candidate_edges=shown_candidate_edges,
+    )
+    st.graphviz_chart(dot)
+
+    st.subheader("Current pop")
+    if stp.last_pop:
+        node_name = id_to_label(stp.last_pop["state"])
+        st.markdown(
+            f"Currently expanding **{node_name}** "
+            f"with estimated total cost **f = {pretty_vec(stp.last_pop['f'])}** "
+            f"and lexicographic queue key **{pretty_vec(stp.last_pop['key'])}**."
+        )
+    else:
+        st.caption("No pop yet.")
+
+    st.subheader("OPEN (Priority Queue)")
+    st.caption("Nodes in the priority queue have a key f, where f = g + h. g is the cost to reach node thus far and h is a heuristic to represent the estimated cost to go.")
+    # show key used in pq 
+    ordered_rules = getattr(stp, "ordered_rules", None)
+
+    if not ordered_rules:
+        for evt in st.session_state.get("trace", []):
+            if evt.get("type") == "meta" and evt.get("ordered_rules") is not None:
+                ordered_rules = evt.get("ordered_rules")
+                break
+
+
+    if ordered_rules:
+        from core.rulebook_classes import class_label
+
+        ordered_labels = []
+
+        for idx in ordered_rules:
+            idx = int(idx)
+
+            found = False
+
+            for cls in st.session_state.get("eq_classes", []):
+                if rule_names[idx] in cls:
+                    ordered_labels.append(class_label(cls))
+                    found = True
+                    break
+
+            if not found:
+                ordered_labels.append(rule_names[idx])
+
+
+        # Remove duplicates because multiple rules from the same
+        # equivalence class may appear in the ordering.
+        seen = set()
+        ordered_rule_names = []
+
+        for label in ordered_labels:
+            if label not in seen:
+                seen.add(label)
+                ordered_rule_names.append(label)
+
+        st.caption(
+            "Nodes in OPEN are ordered lexicographically by the rulebook topological order: "
+            + " → ".join(ordered_rule_names)
+        )
+    else:
+        st.caption(
+            "Nodes in OPEN are ordered using the rulebook comparison key. "
+            "The exact topological order will appear after the trace metadata is loaded."
+        )
+
+    open_rows = []
+    for key, tb, it in stp.OPEN[:200]:
+        f_unscaled = unscale_vec(it["f"])
+        key_unscaled = unscale_vec(list(key))
+
+        row = {
+            "state": id_to_label(it["state"]),
+            "f + g + h": pretty_vec(key_unscaled),
+        }
+
+        for i, x in enumerate(f_unscaled):
+            row[f"f{i}"] = x
+
+        open_rows.append(row)
+
+    if open_rows:
+        st.dataframe(pd.DataFrame(open_rows), use_container_width=True, hide_index=True)
+    else:
+        st.caption("OPEN is empty.")
+
+    st.subheader("Event log")
+
+    def pretty_event(e):
+        if e["kind"] == "meta":
+            return f"Using solver **{e['solver']}**."
+
+        if e["kind"] == "pop":
+            return f"Popped **{id_to_label(e['state'])}** with cost {pretty_vec(e['f'])}."
+
+        if e["kind"] == "enqueue":
+            frm = id_to_label(e["from"]) if e.get("from") is not None else "?"
+            to = id_to_label(e["to"]) if e.get("to") is not None else "?"
+            return f"From **{frm}**, added **{to}** to OPEN with cost {pretty_vec(e['f'])}."
+
+        if e["kind"] == "prune":
+            return f"Pruned **{id_to_label(e['state'])}**."
+
+        if e["kind"] == "other":
+            raw = e.get("raw", {})
+            t = raw.get("type", "unknown")
+
+            if t == "goal":
+                item = extract_realization(raw)
+                return f"Reached goal **{id_to_label(item['state'])}** with cost {pretty_vec(item['f'])}."
+
+            if t == "solution":
+                item = extract_realization(raw)
+                return f"Accepted representative realization at **{id_to_label(item['state'])}** with cost {pretty_vec(item['f'])}."
+
+            if t == "prune":
+                item = extract_realization(raw)
+                where = raw.get("where", "search")
+                return f"Pruned **{id_to_label(item['state'])}** during **{where}** with cost {pretty_vec(item['f'])}."
+
+            if t == "final_solutions":
+                return "Computed final RApex solution pair(s)."
+
+            return f"Trace event: **{t}**."
+
+        return str(e)
+
+    for e in stp.events[-50:]:
+        st.markdown(f"- {pretty_event(e)}")
+
+    if st.session_state.get("solution_paths"):
+        st.subheader("Representative realization(s)")
+        for p in st.session_state["solution_paths"]:
+            st.write(" -> ".join(p))
+
+    if st.session_state.get("candidate_paths"):
+        st.subheader("Also considered under epsilon")
+        for p in st.session_state["candidate_paths"]:
+            st.write(" -> ".join(p))
+
+    st.markdown("### Legend")
+    st.markdown(
+        """
+        <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+        <div><span style="display:inline-block; width:18px; height:18px; background:cyan; border:1px solid #333; margin-right:8px;"></span>Current pop</div>
+        <div><span style="display:inline-block; width:18px; height:18px; background:lightyellow; border:1px solid #333; margin-right:8px;"></span>In OPEN / frontier</div>
+        <div><span style="display:inline-block; width:18px; height:18px; background:white; border:2px dashed red; margin-right:8px;"></span>Pruned node</div>
+        <div><span style="display:inline-block; width:28px; height:0; border-top:4px solid green; margin-right:8px; vertical-align:middle;"></span>Representative realization</div>
+        <div><span style="display:inline-block; width:28px; height:0; border-top:4px solid orange; margin-right:8px; vertical-align:middle;"></span>Also considered under ε</div>
+        <div><span style="display:inline-block; width:28px; height:0; border-top:4px solid blue; margin-right:8px; vertical-align:middle;"></span>Currently explored edge</div>
+        <div><span style="display:inline-block; width:28px; height:0; border-top:2px solid gray; margin-right:8px; vertical-align:middle;"></span>Unhighlighted edge</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.get("trace"):
+        final_pairs = collect_final_solution_pairs(st.session_state.trace)
+
+        if final_pairs:
+            st.subheader("Final RApex solution pair(s)")
+
+            rows = []
+            for i, pair in enumerate(final_pairs):
+                row = {
+                    "pair": i,
+                    "apex": pretty_vec(pair["apex"]),
+                    "realization": pretty_vec(pair["realization"]),
+                }
+                rows.append(row)
+
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            
+    with st.expander("Debug"):
+        st.write("Collected solution vectors:", collect_goal_vectors(st.session_state.trace))
+        st.write("Computed solution edges:", st.session_state.get("solution_edges", set()))
+        st.write("Computed solution paths:", st.session_state.get("solution_paths", []))
+        st.write("Trace meta:", [e for e in st.session_state.get("trace", []) if e.get("type") == "meta"])
+
+    
+
+/USERS/AYAAN/DESKTOP/COLLEGE THINGS/UNDERGRAD RESEARCH/RULEBOOK_APPROXIMATION-MASTER/VIZ/VISUALIZER.PY CODE IS BELOW
+import json
+import streamlit as st
+import pandas as pd
+
+from backend.backend_runner import run_algorithm
+from backend.algorithm_config import ALGORITHMS
+
+from examples.examples import EXAMPLES 
+
+from core.rulebook_cycles import (
+    find_sccs,
+    edges_inside_component,
+    collapse_cycle_to_equivalence_class,
+)
+from core.algorithm_rules import allowed_algorithms
+from core.labels import id_to_label
+from core.trace_utils import apply_trace_step, init_from_trace, extract_realization
+from core.solution_utils import (
+    collect_goal_vectors,
+    collect_final_solution_pairs,
+    compute_rulebook_nondominated_paths,
+)
+from core.formatting import unscale_vec, pretty_vec
+
+from ui.rulebook_section import render_rulebook_section
+from ui.json_import_section import render_json_import_section
+from ui.RAstarpex_info_tab import render_RAstarpex_info_tab
+from ui.sidebar_controls import render_sidebar_controls
+from ui.problem_graph_section import render_problem_graph_section
+from ui.run_controls import render_run_controls
+from ui.comparison_view import render_comparison_view
+from ui.single_run_view import render_single_run_view
+
+from render.graphviz_render import dot_for_graph, dot_for_rule_graph
+
+# ---------------- UI ----------------
+st.set_page_config(page_title="RApex Visualizer", layout="wide")
+
+# ---------------- Tabs ------------------
+st.title("Multi Objective Search Visualizer")
+
+tab_rapex, tab_tool = st.tabs(["RA*pex", "Tool"])
+
+with tab_rapex:
+    render_RAstarpex_info_tab()
+
+with tab_tool: 
+    mode = st.radio("Mode", ["Single Run", "Compare Algorithms"], horizontal=True)
+    render_json_import_section()
+
+    # ---------------- Inputs ----------------
+    if "k" not in st.session_state:
+        st.session_state.k = 0
+    if "rule_names_csv" not in st.session_state:
+        st.session_state.rule_names_csv = ""
+    if "start_label" not in st.session_state:
+        st.session_state.start_label = ""
+    if "goal_label" not in st.session_state:
+        st.session_state.goal_label = ""
+    if "eps_values" not in st.session_state:
+        st.session_state.eps_values = [0.0, 0.0]
+
+
+    # Sync w/ rulebook 
+        
+    if "pending_rule_names_csv" in st.session_state:
+        st.session_state.rule_names_csv = st.session_state.pop("pending_rule_names_csv")
+
+    if "pending_eps_values" in st.session_state:
+        eps = st.session_state.pop("pending_eps_values")
+        st.session_state.eps_values = eps
+
+        for i, val in enumerate(eps):
+            st.session_state[f"eps_{i}"] = float(val)
+
+        j = len(eps)
+        while f"eps_{j}" in st.session_state:
+            st.session_state.pop(f"eps_{j}", None)
+            j += 1
+
+    if "pending_k" in st.session_state:
+        st.session_state.k = st.session_state.pop("pending_k")
+
+    controls = render_sidebar_controls(mode)
+
+    k = controls["k"]
+    rule_names = controls["rule_names"]
+    start_label = controls["start_label"]
+    goal_label = controls["goal_label"]
+    eps = controls["eps"]
+    cutoff = controls["cutoff"]
+    merge = controls["merge"]
+    algo_left = controls["algo_left"]
+    algo_right = controls["algo_right"]
+
+    prec_df = render_rulebook_section(rule_names)
+
+    edges_df = render_problem_graph_section(
+        k, rule_names, start_label, goal_label, prec_df, eps
+    )
+
+    # ---------------- Run buttons ----------------
+    render_run_controls(
+        mode,
+        edges_df,
+        rule_names,
+        eps,
+        prec_df,
+        start_label,
+        goal_label,
+        cutoff,
+        merge,
+        algo_left,
+        algo_right,
+        eq_classes=st.session_state.get("eq_classes"),
+    )
+
+    # ---------------- Compare mode display ----------------
+    if mode == "Compare Algorithms":
+        render_comparison_view(edges_df, algo_right)
+        st.stop()
+    
+    # ---------------- Single run display ----------------
+    render_single_run_view(edges_df, rule_names)
+
+
+        
