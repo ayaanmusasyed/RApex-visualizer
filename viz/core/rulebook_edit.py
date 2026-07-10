@@ -2,8 +2,8 @@
 
 import pandas as pd
 
-from core.rulebook_classes import find_class_index
-from core.rulebook_state import normalize_prec_df
+from viz.core.rulebook_classes import find_class_index
+from viz.core.rulebook_state import normalize_prec_df
 
 # Split one equivalence class back into singleton classes.
 def split_equivalence_class(eq_classes, class_idx):

@@ -1,7 +1,7 @@
 # ui/sidebar_controls.py
 
 import streamlit as st
-from core.algorithm_rules import allowed_algorithms
+from viz.core.algorithm_rules import allowed_algorithms
 
 def render_sidebar_controls(mode):
     with st.sidebar:

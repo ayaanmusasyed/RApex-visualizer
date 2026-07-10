@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 
-from core.solution_utils import compute_rulebook_nondominated_paths
+from viz.core.solution_utils import compute_rulebook_nondominated_paths
 
-from core.problem_graph_state import sync_edge_cost_columns
+from viz.core.problem_graph_state import sync_edge_cost_columns
 
 def render_problem_graph_section(k, rule_names, start_label, goal_label, prec_df, eps):
 

@@ -1,45 +1,37 @@
-import sys
-from pathlib import Path
-
-VIZ_DIR = Path(__file__).resolve().parent
-
-if str(VIZ_DIR) not in sys.path:
-    sys.path.insert(0, str(VIZ_DIR))
-
 import json
 import streamlit as st
 import pandas as pd
 
-from backend.backend_runner import run_algorithm
-from backend.algorithm_config import ALGORITHMS
+from viz.backend.backend_runner import run_algorithm
+from viz.backend.algorithm_config import ALGORITHMS
 
-from examples.examples import EXAMPLES 
+from viz.examples.examples import EXAMPLES 
 
-from core.rulebook_cycles import (
+from viz.core.rulebook_cycles import (
     find_sccs,
     edges_inside_component,
     collapse_cycle_to_equivalence_class,
 )
-from core.algorithm_rules import allowed_algorithms
-from core.labels import id_to_label
-from core.trace_utils import apply_trace_step, init_from_trace, extract_realization
-from core.solution_utils import (
+from viz.core.algorithm_rules import allowed_algorithms
+from viz.core.labels import id_to_label
+from viz.core.trace_utils import apply_trace_step, init_from_trace, extract_realization
+from viz.core.solution_utils import (
     collect_goal_vectors,
     collect_final_solution_pairs,
     compute_rulebook_nondominated_paths,
 )
-from core.formatting import unscale_vec, pretty_vec
+from viz.core.formatting import unscale_vec, pretty_vec
 
-from ui.rulebook_section import render_rulebook_section
-from ui.json_import_section import render_json_import_section
-from ui.RAstarpex_info_tab import render_RAstarpex_info_tab
-from ui.sidebar_controls import render_sidebar_controls
-from ui.problem_graph_section import render_problem_graph_section
-from ui.run_controls import render_run_controls
-from ui.comparison_view import render_comparison_view
-from ui.single_run_view import render_single_run_view
+from viz.ui.rulebook_section import render_rulebook_section
+from viz.ui.json_import_section import render_json_import_section
+from viz.ui.RAstarpex_info_tab import render_RAstarpex_info_tab
+from viz.ui.sidebar_controls import render_sidebar_controls
+from viz.ui.problem_graph_section import render_problem_graph_section
+from viz.ui.run_controls import render_run_controls
+from viz.ui.comparison_view import render_comparison_view
+from viz.ui.single_run_view import render_single_run_view
 
-from render.graphviz_render import dot_for_graph, dot_for_rule_graph
+from viz.render.graphviz_render import dot_for_graph, dot_for_rule_graph
 
 # ---------------- UI ----------------
 st.set_page_config(page_title="RApex Visualizer", layout="wide")

@@ -1,4 +1,4 @@
-from backend.algorithm_config import ALGORITHMS
+from viz.backend.algorithm_config import ALGORITHMS
 
 def allowed_algorithms(k):
     out = []

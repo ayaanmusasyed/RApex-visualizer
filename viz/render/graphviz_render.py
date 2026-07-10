@@ -125,7 +125,7 @@ def dot_for_rule_graph(rule_names, prec_df):
 
 # Draw the rulebook using equivalence classes as graph nodes.
 def dot_for_rule_class_graph(rule_names, prec_df, eq_classes):
-    from core.rulebook_classes import class_label, find_class_index
+    from viz.core.rulebook_classes import class_label, find_class_index
 
     lines = [
         "digraph Rulebook {",

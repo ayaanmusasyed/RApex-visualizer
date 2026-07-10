@@ -1,5 +1,5 @@
-from core.trace_utils import extract_realization
-from core.formatting import unscale_vec
+from viz.core.trace_utils import extract_realization
+from viz.core.formatting import unscale_vec
 
 
 def approx_equal_vec(a, b, tol=1e-4):

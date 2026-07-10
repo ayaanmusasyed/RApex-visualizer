@@ -2,9 +2,9 @@ import streamlit as st
 import json
 import pandas as pd
 
-from examples.examples import EXAMPLES
+from viz.examples.examples import EXAMPLES
 
-from core.json_problem import parse_problem_json, problem_state_to_json
+from viz.core.json_problem import parse_problem_json, problem_state_to_json
 # ------------ JSON input ----------
 
 def render_json_import_section():

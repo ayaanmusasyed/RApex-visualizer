@@ -1,4 +1,4 @@
-from core.rulebook_classes import class_label, find_class_index
+from viz.core.rulebook_classes import class_label, find_class_index
 
 # Convert equivalence-class rulebook state into Cytoscape nodes and edges.
 def rulebook_class_cytoscape_elements(rule_names, prec_df, eq_classes):

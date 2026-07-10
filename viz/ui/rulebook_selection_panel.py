@@ -1,11 +1,11 @@
 import streamlit as st
 
-from core.rulebook_classes import (
+from viz.core.rulebook_classes import (
     class_label,
     find_class_index,
     remove_edges_inside_classes,
 )
-from core.rulebook_edit import (
+from viz.core.rulebook_edit import (
     split_equivalence_class,
     add_class_edge,
     delete_class_edge,

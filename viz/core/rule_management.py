@@ -1,6 +1,6 @@
 import pandas as pd
 
-from core.rulebook_state import normalize_prec_df
+from viz.core.rulebook_state import normalize_prec_df
 
 # Add a new rule/objective and create a singleton equivalence class for it.
 def add_rule(rule_names, eq_classes, eps, new_rule_name):

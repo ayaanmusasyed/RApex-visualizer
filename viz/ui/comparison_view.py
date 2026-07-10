@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from render.graphviz_render import dot_for_graph
+from viz.render.graphviz_render import dot_for_graph
 
 
 def parse_stats_text(stats_text):

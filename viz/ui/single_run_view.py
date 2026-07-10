@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 
-from core.trace_utils import apply_trace_step, init_from_trace, extract_realization
-from core.formatting import unscale_vec, pretty_vec
-from render.graphviz_render import dot_for_graph
-from core.solution_utils import collect_goal_vectors, collect_final_solution_pairs
-from core.labels import id_to_label
-from core.rulebook_classes import class_label
+from viz.core.trace_utils import apply_trace_step, init_from_trace, extract_realization
+from viz.core.formatting import unscale_vec, pretty_vec
+from viz.render.graphviz_render import dot_for_graph
+from viz.core.solution_utils import collect_goal_vectors, collect_final_solution_pairs
+from viz.core.labels import id_to_label
+from viz.core.rulebook_classes import class_label
 
 def render_single_run_view(edges_df, rule_names):
     if "trace_stepper" not in st.session_state:
@@ -109,7 +109,7 @@ def render_single_run_view(edges_df, rule_names):
 
 
     if ordered_rules:
-        from core.rulebook_classes import class_label
+        from viz.core.rulebook_classes import class_label
 
         ordered_labels = []
 

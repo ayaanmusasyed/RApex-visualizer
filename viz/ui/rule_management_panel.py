@@ -1,12 +1,12 @@
 import streamlit as st
 
-from core.rule_management import (
+from viz.core.rule_management import (
     add_rule,
     rename_rule,
     delete_rule,
 )
 
-from core.problem_graph_state import sync_edge_cost_columns
+from viz.core.problem_graph_state import sync_edge_cost_columns
 
 # Render controls for adding, renaming, and deleting rules.
 def render_rule_management_panel(rule_names, prec_df, eps):

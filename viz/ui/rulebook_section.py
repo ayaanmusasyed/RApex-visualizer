@@ -3,18 +3,18 @@ import pandas as pd
 
 from streamlit_cytoscapejs import st_cytoscapejs
 
-from render.graphviz_render import dot_for_rule_class_graph
-from render.cytoscape_render import (
+from viz.render.graphviz_render import dot_for_rule_class_graph
+from viz.render.cytoscape_render import (
     rulebook_class_cytoscape_elements,
     rulebook_cytoscape_stylesheet,
 )
 
-from core.rulebook_state import normalize_prec_df
-from core.rulebook_classes import default_eq_classes, class_label
+from viz.core.rulebook_state import normalize_prec_df
+from viz.core.rulebook_classes import default_eq_classes, class_label
 
-from ui.rule_management_panel import render_rule_management_panel
-from ui.rulebook_selection_panel import render_rulebook_selection_panel
-from ui.rulebook_cycle_panel import render_rulebook_cycle_panel
+from viz.ui.rule_management_panel import render_rule_management_panel
+from viz.ui.rulebook_selection_panel import render_rulebook_selection_panel
+from viz.ui.rulebook_cycle_panel import render_rulebook_cycle_panel
 
 
 # Purpose:

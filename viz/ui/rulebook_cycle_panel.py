@@ -1,7 +1,7 @@
 import streamlit as st
 
-from core.rulebook_cycles import find_sccs, edges_inside_component
-from core.rulebook_classes import (
+from viz.core.rulebook_cycles import find_sccs, edges_inside_component
+from viz.core.rulebook_classes import (
     collapse_rules_into_class,
     remove_edges_inside_classes,
 )
