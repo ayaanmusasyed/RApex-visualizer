@@ -50,7 +50,7 @@ with tab_tool:
 
     # ---------------- Inputs ----------------
     if "k" not in st.session_state:
-        st.session_state.k = 2
+        st.session_state.k = 0
     if "rule_names_csv" not in st.session_state:
         st.session_state.rule_names_csv = ""
     if "start_label" not in st.session_state:
