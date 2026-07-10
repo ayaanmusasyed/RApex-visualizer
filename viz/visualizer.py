@@ -1,3 +1,11 @@
+import sys
+from pathlib import Path
+
+VIZ_DIR = Path(__file__).resolve().parent
+
+if str(VIZ_DIR) not in sys.path:
+    sys.path.insert(0, str(VIZ_DIR))
+
 import json
 import streamlit as st
 import pandas as pd
