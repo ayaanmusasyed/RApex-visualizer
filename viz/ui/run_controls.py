@@ -39,6 +39,7 @@ def render_run_controls(
                 st.session_state.last_run_stdout = result["stdout"]
                 st.session_state.last_run_stderr = result["stderr"]
                 st.session_state.last_run_stats = result["stats_text"]
+                st.session_state.last_run_timings = result["timings"]
                 st.session_state.name_to_id = result["name_to_id"]
                 st.session_state.solution_edges = result["solution_edges"]
                 st.session_state.solution_paths = result["solution_paths"]

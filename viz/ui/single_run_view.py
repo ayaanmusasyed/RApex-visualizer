@@ -254,11 +254,26 @@ def render_single_run_view(edges_df, rule_names):
                 rows.append(row)
 
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-            
-    with st.expander("Debug"):
-        st.write("Collected solution vectors:", collect_goal_vectors(st.session_state.trace))
-        st.write("Computed solution edges:", st.session_state.get("solution_edges", set()))
-        st.write("Computed solution paths:", st.session_state.get("solution_paths", []))
-        st.write("Trace meta:", [e for e in st.session_state.get("trace", []) if e.get("type") == "meta"])
+
+    st.subheader("Tool Performance")
+
+    timings = st.session_state.get("last_run_timings", {})
+
+    if timings:
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "Stage": timings.keys(),
+                "Seconds": timings.values(),
+            }
+        )
+
+        st.dataframe(df, width="stretch", hide_index=True)          
+    # with st.expander("Debug"):
+    #     st.write("Collected solution vectors:", collect_goal_vectors(st.session_state.trace))
+    #     st.write("Computed solution edges:", st.session_state.get("solution_edges", set()))
+    #     st.write("Computed solution paths:", st.session_state.get("solution_paths", []))
+    #     st.write("Trace meta:", [e for e in st.session_state.get("trace", []) if e.get("type") == "meta"])
 
     

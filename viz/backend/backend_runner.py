@@ -1,4 +1,5 @@
 # viz/backend_runner.py
+from time import perf_counter
 
 import subprocess
 import tempfile
@@ -67,6 +68,10 @@ def run_algorithm(
     merge,
     eq_classes=None,
 ):
+    
+    timings = {}
+    t = perf_counter()
+
     if len(rule_names) != len(eps):
         raise ValueError("Rule names count must match epsilon length.")
 
@@ -88,9 +93,13 @@ def run_algorithm(
         rules_path = td / "rules.txt"
         queries_path = td / "queries.txt"
 
+        t = perf_counter()
+
         write_queries_txt(queries_path, s_id, t_id)
         write_rules_txt(rules_path, rule_names, eps, prec_df, eq_classes)
         gr_paths = write_gr_files(td, edges_df, name_to_id, k)
+
+        timings["Write input files"] = perf_counter() - t
 
         cmd = [
             str(bin_path),
@@ -105,7 +114,9 @@ def run_algorithm(
             *[str(p) for p in gr_paths],
         ]
 
+        t = perf_counter()
         res = subprocess.run(cmd, capture_output=True, text=True, cwd=td)
+        timings["RA*pex"] = perf_counter() - t  
 
         if res.returncode != 0:
             raise RuntimeError(
@@ -122,14 +133,17 @@ def run_algorithm(
         candidate_paths = []
 
         if trace_path.exists():
+            t = perf_counter()
             raw_lines = trace_path.read_text(encoding="utf-8").splitlines()
             fixed = parse_trace_lines(raw_lines)
 
             trace = fixed
             trace_stepper = init_from_trace(fixed)
+            timings["Parse trace"] = perf_counter() - t
 
             id_to_name = {v: k for k, v in name_to_id.items()}
 
+            t = perf_counter()
             solution_paths = collect_final_solution_paths_from_trace(fixed, id_to_name)
 
             if solution_paths:
@@ -141,6 +155,7 @@ def run_algorithm(
                 solution_paths = compute_solution_paths(
                     fixed, edges_df, name_to_id, start_label, goal_label, k
                 )
+            timings["Solution reconstruction"] = perf_counter() - t
 
             if len(edges_df) <= 20:
                 candidate_paths = compute_candidate_paths(
@@ -164,4 +179,5 @@ def run_algorithm(
             "solution_paths": solution_paths,
             "candidate_edges": candidate_edges,
             "candidate_paths": candidate_paths,
+            "timings": timings,
         }
