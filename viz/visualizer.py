@@ -52,11 +52,11 @@ with tab_tool:
     if "k" not in st.session_state:
         st.session_state.k = 2
     if "rule_names_csv" not in st.session_state:
-        st.session_state.rule_names_csv = "r0,r1"
+        st.session_state.rule_names_csv = ""
     if "start_label" not in st.session_state:
-        st.session_state.start_label = "S"
+        st.session_state.start_label = ""
     if "goal_label" not in st.session_state:
-        st.session_state.goal_label = "T"
+        st.session_state.goal_label = ""
     if "eps_values" not in st.session_state:
         st.session_state.eps_values = [0.0, 0.0]
 
