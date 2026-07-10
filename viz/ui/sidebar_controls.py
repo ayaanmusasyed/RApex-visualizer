@@ -9,8 +9,8 @@ def render_sidebar_controls(mode):
 
         k = st.number_input(
             "Number of rules (dimensions)",
-            min_value=1,
-            max_value=12,
+            min_value=0,
+            max_value=100,
             step=1,
             key="k"
         )
