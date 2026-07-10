@@ -19,8 +19,8 @@ def ensure_binary(repo_root: Path):
     bin_path = repo_root / "build" / "multiobj"
     build_dir = repo_root / "build"
 
-    # if bin_path.exists():
-    #     return bin_path
+    if bin_path.exists():
+        return bin_path
 
     build_dir.mkdir(exist_ok=True)
 
