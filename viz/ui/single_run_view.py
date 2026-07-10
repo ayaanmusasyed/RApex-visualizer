@@ -255,21 +255,30 @@ def render_single_run_view(edges_df, rule_names):
 
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    st.subheader("Tool Performance")
+    with st.expander("Tool performance time", expanded=True):
+        timings = st.session_state.get("last_run_timings", {})
 
-    timings = st.session_state.get("last_run_timings", {})
+        if timings:
+            timing_rows = [
+                {
+                    "Stage": stage,
+                    "Seconds": round(seconds, 6),
+                }
+                for stage, seconds in timings.items()
+            ]
 
-    if timings:
-        import pandas as pd
+            timing_df = pd.DataFrame(timing_rows)
 
-        df = pd.DataFrame(
-            {
-                "Stage": timings.keys(),
-                "Seconds": timings.values(),
-            }
-        )
+            st.dataframe(
+                timing_df,
+                width="stretch",
+                hide_index=True,
+            )
+        else:
+            st.warning(
+                "No timing data is available. Run RApex again after adding the timing code."
+            )  
 
-        st.dataframe(df, width="stretch", hide_index=True)          
     # with st.expander("Debug"):
     #     st.write("Collected solution vectors:", collect_goal_vectors(st.session_state.trace))
     #     st.write("Computed solution edges:", st.session_state.get("solution_edges", set()))

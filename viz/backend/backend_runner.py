@@ -70,7 +70,7 @@ def run_algorithm(
 ):
     
     timings = {}
-    t = perf_counter()
+    total_start = perf_counter()
 
     if len(rule_names) != len(eps):
         raise ValueError("Rule names count must match epsilon length.")
@@ -83,7 +83,9 @@ def run_algorithm(
 
 
     repo_root = Path(__file__).resolve().parents[2]
+    t = perf_counter()
     bin_path = ensure_binary(repo_root)
+    timings["Ensure binary"] = perf_counter() - t
 
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
@@ -115,8 +117,8 @@ def run_algorithm(
         ]
 
         t = perf_counter()
-        res = subprocess.run(cmd, capture_output=True, text=True, cwd=td)
-        timings["RA*pex"] = perf_counter() - t  
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=td,)
+        timings["C++ backend"] = perf_counter() - t
 
         if res.returncode != 0:
             raise RuntimeError(
@@ -139,23 +141,21 @@ def run_algorithm(
 
             trace = fixed
             trace_stepper = init_from_trace(fixed)
-            timings["Parse trace"] = perf_counter() - t
+            timings["Read and parse trace"] = perf_counter() - t
 
             id_to_name = {v: k for k, v in name_to_id.items()}
 
             t = perf_counter()
-            solution_paths = collect_final_solution_paths_from_trace(fixed, id_to_name)
+
+            solution_paths = collect_final_solution_paths_from_trace(fixed,id_to_name,)
 
             if solution_paths:
                 solution_edges = paths_to_edges(solution_paths)
             else:
-                solution_edges = compute_solution_edges(
-                    fixed, edges_df, name_to_id, start_label, goal_label, k
-                )
-                solution_paths = compute_solution_paths(
-                    fixed, edges_df, name_to_id, start_label, goal_label, k
-                )
-            timings["Solution reconstruction"] = perf_counter() - t
+                solution_edges = compute_solution_edges(fixed,edges_df,name_to_id,start_label,goal_label,k,)
+                solution_paths = compute_solution_paths(fixed, edges_df, name_to_id, start_label, goal_label, k)
+
+            timings["Reconstruct solutions"] = perf_counter() - t
 
             if len(edges_df) <= 20:
                 candidate_paths = compute_candidate_paths(
@@ -166,6 +166,8 @@ def run_algorithm(
 
             candidate_edges = paths_to_edges(candidate_paths)
 
+        timings["Total run"] = perf_counter() - total_start
+        
         return {
             "algorithm": algorithm_name,
             "trace": trace,
