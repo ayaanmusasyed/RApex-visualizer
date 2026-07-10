@@ -83,3 +83,29 @@ def delete_class_edge(prec_df, eq_classes, from_class_idx, to_class_idx):
         })
 
     return pd.DataFrame(rows, columns=["Higher Priority", "Lower Priority"])
+
+# Merge all selected rules into one equivalence class 
+def merge_class_indices(eq_classes, class_indices):
+    class_indices = sorted(set(class_indices))
+
+    if len(class_indices) < 2:
+        raise ValueError("Select at least two different classes.")
+
+    if class_indices[0] < 0 or class_indices[-1] >= len(eq_classes):
+        raise ValueError("Invalid equivalence class selection.")
+
+    merged = []
+    remaining = []
+
+    insert_position = class_indices[0]
+
+    for i, cls in enumerate(eq_classes):
+        if i in class_indices:
+            merged.extend(cls)
+        else:
+            remaining.append(list(cls))
+
+    merged = list(dict.fromkeys(merged))
+    remaining.insert(insert_position, merged)
+
+    return remaining
