@@ -1,7 +1,15 @@
+# ui/problem_graph_section.py
+#
+# CHANGES vs. the Streamlit-only version:
+#   - st_cytoscapejs(...) -> problem_graph_editor(...)   (new component, returns an event dict)
+#   - problem_graph_editor(...) now also takes rule_names, so React can
+#     label the cost-entry prompts with the actual rule order
+#   - added: dispatch_problem_graph_event(...) + st.rerun() right after
+#   - render_problem_graph_selection_panel(...) call removed -- its job is
+#     now done in-graph by React.
+
 import pandas as pd
 import streamlit as st
-
-from streamlit_cytoscapejs import st_cytoscapejs
 
 from viz.core.problem_graph_state import (
     sync_edge_cost_columns,
@@ -11,11 +19,10 @@ from viz.render.cytoscape_problem_graph import (
     problem_graph_cytoscape_elements,
     problem_graph_cytoscape_stylesheet,
 )
+from viz.ui.graph_component import problem_graph_editor
+from viz.ui.problem_graph_dispatch import dispatch_problem_graph_event
 from viz.ui.problem_graph_creation_panel import (
     render_problem_graph_creation_panel,
-)
-from viz.ui.problem_graph_selection_panel import (
-    render_problem_graph_selection_panel,
 )
 from viz.ui.problem_graph_sanity_check import (
     render_problem_graph_sanity_check,
@@ -39,11 +46,13 @@ def render_problem_graph_section(
 
     st.subheader("Interactive problem graph")
     st.caption(
-        "Click a node to rename it, set start or goal, "
-        "create an edge, or delete it."
+        "Click empty space to add a node. Click a node, then click "
+        "another node, to connect them. Click an edge to edit its "
+        "costs. Double-click a node to rename. Right-click for more "
+        "actions."
     )
 
-    selected = st_cytoscapejs(
+    event = problem_graph_editor(
         elements=problem_graph_cytoscape_elements(
             st.session_state.node_names,
             st.session_state.edges_df,
@@ -52,12 +61,13 @@ def render_problem_graph_section(
             goal_label,
         ),
         stylesheet=problem_graph_cytoscape_stylesheet(),
-        width=700,
-        height=400,
-        key="problem_graph_cytoscape",
+        rule_names=rule_names,
+        key="problem_graph_editor",
     )
 
-    render_problem_graph_selection_panel(selected, rule_names, start_label, goal_label,)
+    if event is not None:
+        dispatch_problem_graph_event(event, rule_names, start_label, goal_label)
+        st.rerun()
 
     render_advanced_edge_table(k)
 
@@ -86,6 +96,8 @@ def initialize_problem_graph_state(
 
 
 # Render the editable edge table as an advanced option.
+# Left as plain Streamlit on purpose -- typing exact float costs is
+# fiddly on a canvas. This is the power-user fallback for bulk edits.
 def render_advanced_edge_table(k):
     with st.expander("Advanced: graph edge table"):
         st.caption(

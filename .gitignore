@@ -2,4 +2,5 @@ build/
 __pycache__/
 *.pyc
 .DS_Store
-merge-repo.js
+merge-repo.jsviz/frontend/node_modules/
+viz/frontend/build/

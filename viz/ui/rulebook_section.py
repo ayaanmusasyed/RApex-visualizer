@@ -1,7 +1,14 @@
+# ui/rulebook_section.py
+#
+# CHANGES vs. the Streamlit-only version:
+#   - st_cytoscapejs(...) -> rulebook_editor(...)   (new component, returns an event dict)
+#   - added: dispatch_rulebook_event(...) + st.rerun() right after
+#   - render_rulebook_selection_panel(...) call removed -- add/delete class
+#     edges, merge, and split now happen in-graph. Cycle detection panel
+#     is untouched since it's a passive warning, not a click target.
+
 import streamlit as st
 import pandas as pd
-
-from streamlit_cytoscapejs import st_cytoscapejs
 
 from viz.render.graphviz_render import dot_for_rule_class_graph
 from viz.render.cytoscape_render import (
@@ -12,8 +19,9 @@ from viz.render.cytoscape_render import (
 from viz.core.rulebook_state import normalize_prec_df
 from viz.core.rulebook_classes import default_eq_classes, class_label
 
+from viz.ui.graph_component import rulebook_editor
+from viz.ui.rulebook_dispatch import dispatch_rulebook_event
 from viz.ui.rule_management_panel import render_rule_management_panel
-from viz.ui.rulebook_selection_panel import render_rulebook_selection_panel
 from viz.ui.rulebook_cycle_panel import render_rulebook_cycle_panel
 
 
@@ -52,28 +60,28 @@ def render_rulebook_section(rule_names):
     prec_df = normalize_prec_df(st.session_state.prec_df)
     st.session_state.prec_df = prec_df
 
-    st.subheader("Interactive rulebook preview")
+    st.subheader("Interactive rulebook editor")
     st.caption(
-        "Click a rule class to add/delete priority edges or split equivalence classes."
-    )
-    st.caption(
-    "Click a rule class to select it. Use the selected-class panel to add/remove "
-    "priority edges or split equivalence classes."
+        "Double-click a class to rename, drag between classes to add a "
+        "priority edge, shift-click two classes to merge, right-click "
+        "for more actions."
     )
 
-    selected = st_cytoscapejs(
+    event = rulebook_editor(
         elements=rulebook_class_cytoscape_elements(
             rule_names,
             prec_df,
             st.session_state.eq_classes,
         ),
         stylesheet=rulebook_cytoscape_stylesheet(),
-        width=700,
-        height=350,
-        key="rulebook_cytoscape",
+        key="rulebook_editor",
     )
 
-    render_rulebook_selection_panel(selected, prec_df)
+    if event is not None:
+        dispatch_rulebook_event(
+            event, rule_names, prec_df, st.session_state.eq_classes,
+        )
+        st.rerun()
 
     has_cycle = render_rulebook_cycle_panel(rule_names, prec_df)
 

@@ -10,6 +10,8 @@ def rulebook_class_cytoscape_elements(rule_names, prec_df, eq_classes):
                 "id": f"class_{i}",
                 "label": class_label(cls),
                 "kind": "rule_class",
+                "classIndex": i,
+                "rules": cls,
             },
             "position": {
                 "x": 180 * i + 80,
