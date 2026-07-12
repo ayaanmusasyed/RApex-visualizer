@@ -69,7 +69,7 @@ with tab_tool:
         st.session_state.eps_values = [0.0, 0.0]
 
 
-    # Sync w/ rulebook 
+    # Sync
         
     if "pending_rule_names_csv" in st.session_state:
         st.session_state.rule_names_csv = st.session_state.pop("pending_rule_names_csv")
@@ -88,6 +88,12 @@ with tab_tool:
 
     if "pending_k" in st.session_state:
         st.session_state.k = st.session_state.pop("pending_k")
+
+    if "pending_start_label" in st.session_state:
+        st.session_state.start_label = st.session_state.pop("pending_start_label")
+
+    if "pending_goal_label" in st.session_state:
+        st.session_state.goal_label = st.session_state.pop("pending_goal_label")
 
     controls = render_sidebar_controls(mode)
 

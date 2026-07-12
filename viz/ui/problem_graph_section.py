@@ -1,60 +1,100 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
-from viz.core.solution_utils import compute_rulebook_nondominated_paths
+from streamlit_cytoscapejs import st_cytoscapejs
 
-from viz.core.problem_graph_state import sync_edge_cost_columns
+from viz.core.problem_graph_state import (
+    sync_edge_cost_columns,
+    sync_node_names,
+)
+from viz.render.cytoscape_problem_graph import (
+    problem_graph_cytoscape_elements,
+    problem_graph_cytoscape_stylesheet,
+)
+from viz.ui.problem_graph_creation_panel import (
+    render_problem_graph_creation_panel,
+)
+from viz.ui.problem_graph_selection_panel import (
+    render_problem_graph_selection_panel,
+)
+from viz.ui.problem_graph_sanity_check import (
+    render_problem_graph_sanity_check,
+)
 
-def render_problem_graph_section(k, rule_names, start_label, goal_label, prec_df, eps):
 
-    st.header("Problem graph edges")
+# Render the interactive problem graph editor.
+def render_problem_graph_section(
+    k,
+    rule_names,
+    start_label,
+    goal_label,
+    prec_df,
+    eps,
+):
+    initialize_problem_graph_state(k, start_label, goal_label,)
 
-    need_cols = ["u", "v"] + [f"c{i}" for i in range(k)]
+    st.header("Problem graph editor")
 
-    if "edges_df" not in st.session_state:
-        seed = pd.DataFrame([
-            {"u": "S", "v": "A"},
-            {"u": "A", "v": "T"},
-        ])
-        st.session_state.edges_df = sync_edge_cost_columns(seed, k)
-    else:
-        st.session_state.edges_df = sync_edge_cost_columns(
+    render_problem_graph_creation_panel()
+
+    st.subheader("Interactive problem graph")
+    st.caption(
+        "Click a node to rename it, set start or goal, "
+        "create an edge, or delete it."
+    )
+
+    selected = st_cytoscapejs(
+        elements=problem_graph_cytoscape_elements(
+            st.session_state.node_names,
             st.session_state.edges_df,
-            k,
+            rule_names,
+            start_label,
+            goal_label,
+        ),
+        stylesheet=problem_graph_cytoscape_stylesheet(),
+        width=700,
+        height=400,
+        key="problem_graph_cytoscape",
+    )
+
+    render_problem_graph_selection_panel(selected, rule_names, start_label, goal_label,)
+
+    render_advanced_edge_table(k)
+
+    render_problem_graph_sanity_check(st.session_state.edges_df, start_label, goal_label, rule_names, prec_df, eps,)
+
+    return st.session_state.edges_df
+
+
+# Initialize and synchronize problem graph state.
+def initialize_problem_graph_state(
+    k,
+    start_label,
+    goal_label,
+):
+    if "edges_df" not in st.session_state:
+        st.session_state.edges_df = pd.DataFrame(
+            columns=["u", "v"]
         )
 
-    edges_df = st.data_editor(
-        st.session_state.edges_df,
-        key="edges_editor",
-        use_container_width=True,
-        num_rows="dynamic"
-    )
-    st.session_state.edges_df = edges_df
+    st.session_state.edges_df = sync_edge_cost_columns(st.session_state.edges_df, k,)
 
-    with st.expander("Rulebook-nondominated path sanity check"):
-        try:
-            nondom = compute_rulebook_nondominated_paths(
-                edges_df,
-                start_label,
-                goal_label,
-                k,
-                rule_names,
-                prec_df,
-                eps,
-            )
+    if "node_names" not in st.session_state:
+        st.session_state.node_names = []
 
-            if nondom:
-                rows = []
-                for path, cost in nondom:
-                    row = {"Path": " -> ".join(path)}
-                    for i, rn in enumerate(rule_names):
-                        row[rn] = cost[i]
-                    rows.append(row)
+    st.session_state.node_names = sync_node_names(st.session_state.node_names, st.session_state.edges_df, start_label, goal_label,)
 
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-            else:
-                st.caption("No complete start-to-goal paths found.")
-        except Exception as e:
-            st.warning(f"Could not compute sanity check: {e}")
-    
-    return edges_df
+
+# Render the editable edge table as an advanced option.
+def render_advanced_edge_table(k):
+    with st.expander("Advanced: graph edge table"):
+        st.caption(
+            "Manual edge list. Each row stores one "
+            "directed edge and its cost vector."
+        )
+
+        edited_edges = st.data_editor(st.session_state.edges_df, key="edges_editor", use_container_width=True, num_rows="dynamic",)
+
+        st.session_state.edges_df = sync_edge_cost_columns(edited_edges, k,)
+
+        st.session_state.node_names = sync_node_names(st.session_state.node_names, st.session_state.edges_df, st.session_state.get("start_label", ""), st.session_state.get("goal_label", ""),)

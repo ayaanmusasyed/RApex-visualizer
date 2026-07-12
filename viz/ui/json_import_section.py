@@ -67,6 +67,7 @@ def render_json_import_section():
                     st.session_state.eps_values = loaded_eps
                     st.session_state.eq_classes = parsed["eq_classes"]
                     st.session_state.prec_df = parsed["prec_df"]
+                    st.session_state.node_names = parsed["node_names"]
                     st.session_state.edges_df = parsed["edges_df"]
 
                     for i, val in enumerate(loaded_eps):
@@ -86,6 +87,7 @@ def render_json_import_section():
             "rule_names_csv",
             "eq_classes",
             "prec_df",
+            "node_names",
             "edges_df",
             "start_label",
             "goal_label",
@@ -103,6 +105,7 @@ def render_json_import_section():
                 rule_names=rule_names,
                 eq_classes=st.session_state.eq_classes,
                 prec_df=st.session_state.prec_df,
+                node_names=st.session_state.node_names,
                 edges_df=st.session_state.edges_df,
                 start=st.session_state.start_label,
                 goal=st.session_state.goal_label,

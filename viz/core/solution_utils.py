@@ -134,7 +134,7 @@ def compute_candidate_paths(trace, edges_df, name_to_id, start_label, goal_label
 
     all_paths = enumerate_paths_from_edges_df(edges_df, start_label, goal_label, k)
     sol_paths = compute_solution_paths(trace, edges_df, name_to_id, start_label, goal_label, k)
-    sol_path_tuples = {tuple(p) for p in sol_paths}
+    sol_path_tuples = {tuple(path) for path in sol_paths}
 
     candidate_paths = []
 
@@ -142,30 +142,32 @@ def compute_candidate_paths(trace, edges_df, name_to_id, start_label, goal_label
         if tuple(path) in sol_path_tuples:
             continue
 
-    for fv in final_vecs:
-        if len(fv) != len(cost):
-            continue
+        for final_vec in final_vecs:
+            if len(final_vec) != len(cost):
+                continue
 
-        ok = True
-        for i in range(len(cost)):
-            if float(cost[i]) > (1 + float(eps_vals[i])) * float(fv[i]):
-                ok = False
+            valid = True
+
+            for i in range(len(cost)):
+                if float(cost[i]) > (1 + float(eps_vals[i])) * float(final_vec[i]):
+                    valid = False
+                    break
+
+            if valid:
+                candidate_paths.append(path)
                 break
 
-        if ok:
-            candidate_paths.append(path)
-            break
-
-    uniq = []
+    unique_paths = []
     seen = set()
 
-    for p in candidate_paths:
-        tp = tuple(p)
-        if tp not in seen:
-            seen.add(tp)
-            uniq.append(p)
+    for path in candidate_paths:
+        path_tuple = tuple(path)
 
-    return uniq
+        if path_tuple not in seen:
+            seen.add(path_tuple)
+            unique_paths.append(path)
+
+    return unique_paths
 
 
 def paths_to_edges(paths):
